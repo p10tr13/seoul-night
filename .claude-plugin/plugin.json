@@ -1,6 +1,6 @@
 {
   "name": "seoul-night",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "A dark look: a neon Seoul alley, and a pixel somaek band showing the usage limits",
   "types": "./types/index.d.ts"
 }
