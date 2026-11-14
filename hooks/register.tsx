@@ -2,6 +2,8 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, SessionRateLimit, ThemeSetArgs } from 'claude-code'
 
 import type { Git, Meter } from '../types'
+import { TRANSIENT_MS } from './critter'
+import type { ActivityKind } from './critter'
 import { makeColors } from './make-colors.js'
 import { bandSvg, bandText } from './meter'
 import type { CiState } from './meter'
@@ -46,6 +48,7 @@ const meter = atom({ plugin: 'seoul-night', key: 'meter' } as const, null)
 const work = atom({ plugin: 'seoul-night', key: 'work' } as const, null)
 const git = atom({ plugin: 'seoul-night', key: 'git' } as const, null)
 const now = atom({ plugin: 'seoul-night', key: 'now' } as const, 0)
+const activity = atom({ plugin: 'seoul-night', key: 'activity' } as const, null)
 
 // What the line says while a turn runs: drawn at random per kind of work, and again every few seconds.
 const WORDS = {
@@ -151,7 +154,34 @@ const refreshGit = async ($: EngineInterface) => {
     pr,
     ci,
   }
+  const before = await read($, git)
   await update($, git, () => next)
+  // CI that just turned green gets a little dance
+  if (before !== null && before.ci !== 'pass' && next.ci === 'pass' && before.pr === next.pr) {
+    await setActivity($, 'ci-pass')
+  }
+}
+
+// What the critter is doing; a passing state is redrawn away once its time is up.
+const setActivity = async ($: EngineInterface, kind: ActivityKind, turnStartedAt?: number | null) => {
+  const at = await $.clock.now()
+  await update($, activity, a => ({
+    kind,
+    since: at,
+    turnStartedAt: turnStartedAt === undefined ? (a?.turnStartedAt ?? null) : turnStartedAt,
+  }))
+  await update($, now, () => at)
+  if (kind === 'done' || kind === 'error' || kind === 'ci-pass') {
+    $.clock.after(TRANSIENT_MS[kind] + 300, () => void tick($))
+  }
+}
+
+const toolKind = (tool: string): ActivityKind => {
+  if (tool === 'Bash' || tool === 'PowerShell') return 'bash'
+  if (tool === 'Write' || tool === 'Edit' || tool === 'NotebookEdit') return 'edit'
+  if (tool === 'Read' || tool === 'Grep' || tool === 'Glob') return 'read'
+  if (tool === 'WebFetch' || tool === 'WebSearch') return 'web'
+  return 'thinking'
 }
 
 // The machine's UTC offset, read from git's committer identity (`... 1731590000 +0100`).
@@ -203,14 +233,25 @@ export const register: Register = on => {
     return next(e)
   })
 
-  on('prompt.submit', ($, e, next) => {
+  on('prompt.submit', async ($, e, next) => {
     // a new turn starts with a fresh phrase
     shown = null
+    await setActivity($, 'thinking', await $.clock.now())
 
     return next(e)
   })
 
+  on('tool.call', async ($, e, next) => {
+    await setActivity($, toolKind(e.tool))
+    const result = await next(e)
+    const failed = result.deny !== undefined || result.isError === true
+    await setActivity($, failed ? 'error' : 'thinking')
+
+    return result
+  })
+
   on('turn.complete', async ($, e, next) => {
+    await setActivity($, 'done', null)
     await update($, work, w => (w === null ? w : { ...w, turns: w.turns + 1 }))
     await tick($)
     await refreshGit($)
@@ -272,6 +313,8 @@ export const register: Register = on => {
       meter: await read($, meter),
       work: await read($, work),
       git: await read($, git),
+      activity: await read($, activity),
+      isWorking: e.props.isWorking,
       now: await read($, now),
     }
 

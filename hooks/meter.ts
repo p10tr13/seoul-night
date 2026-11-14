@@ -3,6 +3,9 @@
 // time worked, overtime, git and CI.
 // Pure: it takes the figures and returns markup, so it renders the same anywhere.
 
+import { CRITTER_CSS, critterSvg } from './critter'
+import type { Activity } from './critter'
+
 export type Meter = {
   /** Percent used of the 5-hour window; null before the first reading or off a subscription. */
   fiveHour: number | null
@@ -37,6 +40,9 @@ export type BandFigures = {
   meter: Meter | null
   work: Work | null
   git: Git | null
+  activity: Activity | null
+  /** True while a turn runs. */
+  isWorking: boolean
   now: number
 }
 
@@ -205,24 +211,13 @@ const skewer = (filled: number | null, x: number, y: number): string => {
   return out
 }
 
-// The critter: blushes when the 5-hour glass runs low, sleeps when it is empty.
-const critter = (left: number | null, x: number, y: number): string => {
-  const mood = left === null ? 'ok' : left <= 0 ? 'empty' : left < 20 ? 'low' : 'ok'
-  const cheek = mood === 'ok' ? 'p' : 'R'
-  const rows = [
-    '..oooooooooooo..',
-    '.oooooooooooooo.',
-    'oooooooooooooooo',
-    mood === 'empty' ? 'oooooooooooooooo' : 'ooooEooooooEoooo',
-    mood === 'empty' ? 'oooxxooooooxxooo' : 'ooooEooooooEoooo',
-    'aooooooooooooooa',
-    `a${cheek}${cheek}oooooooooo${cheek}${cheek}a`,
-    'oooooooooooooooo',
-    '.oooooooooooooo.',
-    '..ll........ll..',
-    '..ll........ll..',
-  ]
-  return sprite(rows, { o: '#d97757', a: '#c96a4b', E: '#1d1420', x: '#1d1420', p: '#ff9a8f', R: '#ff3355', l: '#b85c3c' }, x, y)
+const offHoursOf = (now: number, offset: number | null): 'overtime' | 'weekend' | null => {
+  if (offset === null) return null
+  const local = new Date(now + offset * 60000)
+  const day = local.getUTCDay()
+  const hour = local.getUTCHours()
+  if (day === 0 || day === 6) return 'weekend'
+  return hour >= 18 || hour < 6 ? 'overtime' : null
 }
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -236,7 +231,7 @@ const ciLabel = (git: Git | null): { label: string; color: string } => {
   return { label: `PR #${git.pr}`, color: '#c9a2ff' }
 }
 
-export const bandSvg = ({ meter, work, git, now }: BandFigures): string => {
+export const bandSvg = ({ meter, work, git, activity, isWorking, now }: BandFigures): string => {
   const five = meter?.fiveHour ?? null
   const week = meter?.week ?? null
   const fiveLeft = five === null ? null : clamp(100 - five)
@@ -271,12 +266,13 @@ export const bandSvg = ({ meter, work, git, now }: BandFigures): string => {
 @keyframes rise{from{transform:translateY(0);opacity:1}to{transform:translateY(var(--rise));opacity:0}}
 .blink{animation:bl 1.2s steps(1) infinite}
 @keyframes bl{50%{opacity:.25}}
+${CRITTER_CSS}
 @media (prefers-reduced-motion: reduce){*{animation:none!important}}
 </style>
 <rect x="1" y="1" width="${W - 2}" height="${H - 2}" rx="6" fill="#0b0b1d" stroke="#3a2a5c" stroke-width="2"/>
 <rect x="6" y="6" width="${W - 12}" height="${H - 12}" rx="3" fill="none" stroke="#ff5fa8" stroke-opacity=".35" stroke-dasharray="8 6"/>
-${critter(fiveLeft, 16, 26)}
-${text(48, 92, 11, '#ff9ee0', '주인님', 'middle')}
+${critterSvg({ activity, isWorking, fiveLeft, ci: git?.ci ?? null, offHours: offHoursOf(now, work?.utcOffsetMin ?? null), now }, 14, 38)}
+${text(46, 100, 10, '#c9a2ff', '주인님', 'middle')}
 ${glass(fiveLeft, 96, 10)}
 ${text(160, 28, 11, '#c6c0da', '소맥 · 5시간')}
 ${text(160, 58, 26, fiveColor, pct(fiveLeft))}
