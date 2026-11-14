@@ -234,7 +234,7 @@ export const bandSvg = ({ meter, work, git, activity, isWorking, now }: BandFigu
         (git.dirty > 0 ? `<tspan fill="#ffcf4a"> ●${git.dirty}</tspan>` : '') +
         (git.ahead > 0 ? `<tspan fill="#5ff3ff"> ↑${git.ahead}</tspan>` : '') +
         `</text>`
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" shape-rendering="crispEdges">
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">
 <style>
 .bub{animation:rise 2.4s steps(8) infinite}
 @keyframes rise{from{transform:translateY(0);opacity:1}to{transform:translateY(var(--rise));opacity:0}}

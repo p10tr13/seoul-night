@@ -645,10 +645,11 @@ const staticParts = { water: water.svg(), bg: bg.svg(), det: det.svg(), top: top
 function build(mode) {
   const b = mode === 'b';
   const g = (n, override, rest) => `<g class="hn-${n}"${b ? (override ? ' ' + override : '') : rest ? ' ' + rest : ''}>${parts[n] ?? ''}</g>`;
-  // The desktop app runs a scene's animations only with its CSS one rule per line and no
-  // shape-rendering on the root, so crisp pixels are asked for on a group inside instead.
+  // The desktop app runs a backdrop's animations only when its CSS has one rule per line and
+  // the markup holds no shape-rendering anywhere (attribute or CSS): pixels stay crisp without it
+  // at whole-number scales.
   let s = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" preserveAspectRatio="xMidYMid slice">';
-  s += `<style>${cssLines(CSS)}</style><g shape-rendering="crispEdges">`;
+  s += `<style>${cssLines(CSS)}</style><g>`;
   s += bands(skyC, skyY) + bands(watC, watY) + staticParts.water;
   s += g('s0', 'transform="translate(1 0)"') + g('s1', 'transform="translate(-1 0)"');
   s += staticParts.bg + staticParts.det;
