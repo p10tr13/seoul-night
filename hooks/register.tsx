@@ -58,36 +58,61 @@ const WORDS = {
 }
 const ROTATE_MS = 8000
 
-// The desktop's description of a tool step (`Creating notes.md`, `Running a command`), told in Korean.
-// `{x}` is the file or thing the step names; a step that names none takes the bare phrase.
-const STEPS: { verbs: RegExp; named: string[]; bare: string[] }[] = [
-  { verbs: /^(creating|writing)\b/i, named: ['{x} 빚는 중', '{x} 뚝딱 만드는 중', '{x} 출산 중'], bare: ['뭔가 뚝딱 만드는 중'] },
-  { verbs: /^(editing|updating|modifying)\b/i, named: ['{x} 손보는 중', '{x} 성형 중', '{x} 화장 고치는 중'], bare: ['코드 성형 중'] },
-  { verbs: /^(reading|viewing|opening)\b/i, named: ['{x} 정독하는 중', '{x} 훑어보는 중'], bare: ['정독하는 중'] },
-  { verbs: /^(running|executing)\b/i, named: [], bare: ['명령어 돌리는 중', '터미널에 주문 넣는 중', '엔터 꾹 누르는 중'] },
-  { verbs: /^(searching|finding|listing|grepping|globbing|looking)\b/i, named: [], bare: ['구석구석 뒤지는 중', '숨은 그림 찾는 중'] },
-  { verbs: /^(fetching|browsing|downloading)\b/i, named: [], bare: ['인터넷 서핑 중', '네이버에 물어보는 중'] },
-]
+// A tool step told in Korean. The step is known from the tool that runs (`stepOfTool`), and failing
+// that from the desktop's description of it (`Creating notes.md`, `Running a command`).
+// `{x}` is the file the step works on; a step that names none takes the bare phrase.
+type StepKind = 'create' | 'edit' | 'read' | 'run' | 'search' | 'web'
+
+const STEPS: Record<StepKind, { verbs: RegExp; named: string[]; bare: string[] }> = {
+  create: { verbs: /^(creat|writ|wrote|add)/i, named: ['{x} 빚는 중', '{x} 뚝딱 만드는 중', '{x} 출산 중'], bare: ['뭔가 뚝딱 만드는 중'] },
+  edit: { verbs: /^(edit|updat|modif|chang|patch|apply|fix|mak\w* (edit|change))/i, named: ['{x} 손보는 중', '{x} 성형 중', '{x} 화장 고치는 중'], bare: ['코드 성형 중', '살짝 손보는 중'] },
+  read: { verbs: /^(read|view|open)/i, named: ['{x} 정독하는 중', '{x} 훑어보는 중'], bare: ['정독하는 중'] },
+  run: { verbs: /^(run|ran|execut)/i, named: [], bare: ['명령어 돌리는 중', '터미널에 주문 넣는 중', '엔터 꾹 누르는 중'] },
+  search: { verbs: /^(search|find|found|list|grep|glob|look)/i, named: [], bare: ['구석구석 뒤지는 중', '숨은 그림 찾는 중'] },
+  web: { verbs: /^(fetch|brows|download)/i, named: [], bare: ['인터넷 서핑 중', '네이버에 물어보는 중'] },
+}
+
+const stepOfTool = (tool: string): StepKind | null => {
+  if (tool === 'Write') return 'create'
+  if (tool === 'Edit' || tool === 'MultiEdit' || tool === 'NotebookEdit') return 'edit'
+  if (tool === 'Read') return 'read'
+  if (tool === 'Bash' || tool === 'PowerShell') return 'run'
+  if (tool === 'Grep' || tool === 'Glob') return 'search'
+  if (tool === 'WebFetch' || tool === 'WebSearch') return 'web'
+  return null
+}
+
+const baseName = (path: string): string | null => path.split(/[\\/]/).filter(Boolean).pop() ?? null
+
+// The file a tool call works on, by the input names the built-in tools use.
+const fileOfInput = (input: unknown): string | null => {
+  if (typeof input !== 'object' || input === null) return null
+  const fields = input as Record<string, unknown>
+  const path = fields.file_path ?? fields.notebook_path
+  return typeof path === 'string' ? baseName(path) : null
+}
+
+const phraseFor = (step: StepKind, file: string | null): string | null => {
+  const { named, bare } = STEPS[step]
+  const phrase = file !== null && named.length > 0 ? pickFrom(named) : pickFrom(bare)
+  return phrase === undefined ? null : phrase.replace('{x}', file ?? '')
+}
 
 const pickFrom = (pool: readonly string[], avoid?: string): string | undefined => {
   const choices = pool.length > 1 && avoid !== undefined ? pool.filter(p => p !== avoid) : pool
   return choices[Math.floor(Math.random() * choices.length)]
 }
 
-// A file or path the step names, as its last segment; a plain phrase (`a command`) names nothing.
+// A file or path the description names, as its last segment; a plain phrase (`a command`) names nothing.
 const namedThing = (rest: string): string | null => {
   const token = rest.trim().split(/\s+/)[0] ?? ''
-  if (!/[./\\]/.test(token)) return null
-  return token.split(/[\\/]/).filter(Boolean).pop() ?? null
+  return /[./\\]/.test(token) ? baseName(token) : null
 }
 
 const stepInKorean = (word: string): string | null => {
-  for (const step of STEPS) {
-    const match = word.match(step.verbs)
-    if (!match) continue
-    const thing = namedThing(word.slice(match[0].length))
-    const phrase = thing !== null && step.named.length > 0 ? pickFrom(step.named) : pickFrom(step.bare)
-    return phrase === undefined ? null : phrase.replace('{x}', thing ?? '')
+  for (const [step, { verbs }] of Object.entries(STEPS) as [StepKind, (typeof STEPS)[StepKind]][]) {
+    const match = word.match(verbs)
+    if (match) return phraseFor(step, namedThing(word.slice(match[0].length).replace(/^\w*/, '')))
   }
   return null
 }
@@ -202,6 +227,8 @@ export const register: Register = on => {
   // the phrase on the line now, and each tool step's phrase
   let shown: { pool: readonly string[]; word: string; at: number } | null = null
   const stepPhrases = new Map<string, string>()
+  // the tool step running now, as the tool and its file tell it
+  let running: { step: StepKind; file: string | null } | null = null
 
   on('session.start', async ($, e, next) => {
     const unpainted = problems.find(line => line.startsWith("Desktop won't paint"))
@@ -242,8 +269,11 @@ export const register: Register = on => {
   })
 
   on('tool.call', async ($, e, next) => {
+    const step = stepOfTool(e.tool)
+    running = step === null ? null : { step, file: fileOfInput(e) }
     await setActivity($, toolKind(e.tool))
     const result = await next(e)
+    running = null
     const failed = result.deny !== undefined || result.isError === true
     await setActivity($, failed ? 'error' : 'thinking')
 
@@ -265,14 +295,17 @@ export const register: Register = on => {
     if (message !== null) {
       return next(e)
     }
-    const isToolStep = (mode === 'tool-use' || mode === 'tool-input') && e.surface === 'desktop' && word !== 'Working'
+    // a tool we know is running, or the desktop describing a step in its own words
+    const isToolStep =
+      e.surface === 'desktop' && (running !== null || ((mode === 'tool-use' || mode === 'tool-input') && word !== 'Working'))
     if (isToolStep) {
       // one phrase per step, so the line does not flicker while the step runs
-      let phrase = stepPhrases.get(word)
+      const key = `${word}|${running?.step ?? ''}|${running?.file ?? ''}`
+      let phrase = stepPhrases.get(key)
       if (phrase === undefined) {
-        phrase = stepInKorean(word) ?? word
+        phrase = (running !== null ? phraseFor(running.step, running.file) : null) ?? stepInKorean(word) ?? word
         if (stepPhrases.size > 200) stepPhrases.clear()
-        stepPhrases.set(word, phrase)
+        stepPhrases.set(key, phrase)
       }
       return next({ ...e, props: { ...e.props, word: phrase } })
     }
