@@ -15,7 +15,7 @@ const lines = px => {
   }
   return out
 }
-const sprites = [critterPixels('idle', false), critterPixels('tipsy', false), glassPixels(72), glassPixels(12), bottlePixels(45), skewerPixels(62)]
+const sprites = [critterPixels('idle'), critterPixels('tipsy'), glassPixels(72), glassPixels(12), bottlePixels(45), skewerPixels(62)]
 const cols = sprites.map(lines)
 for (let r = 0; r < 6; r++) console.log(cols.map(c => c[r]).join('  '))
 const now = Date.parse('2026-11-14T14:41:00Z')

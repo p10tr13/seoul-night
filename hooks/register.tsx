@@ -8,8 +8,8 @@ import { makeColors } from './make-colors.js'
 import { bandSvg, bandText } from './meter'
 import type { CiState } from './meter'
 import { SCENE } from './scene'
-import { CRITTER_COLUMNS, GAP, termBand, termBandColumns } from './term'
-import type { Line } from './term'
+import { CRITTER_COLUMNS, FRAME_MS, GAP, critterFrame, termBand, termBandColumns, toCells } from './term'
+import type { CritterScene, Line } from './term'
 
 // A Korean city at night: indigo sky, neon pink and cyan, warm windows.
 const { theme, problems } = makeColors({
@@ -240,6 +240,9 @@ export const register: Register = on => {
   // the phrase on the line now, and each tool step's phrase
   let shown: { pool: readonly string[]; word: string; at: number } | null = null
   const stepPhrases = new Map<string, string>()
+  // the terminal band's critter, moved a frame at a time by blits: where it is drawn, what it acts out
+  let frame = 0
+  let stage: { requestId: string; scene: CritterScene; cells: string } | null = null
   // the tool step running now, as the tool and its file tell it
   let running: { step: StepKind; file: string | null } | null = null
 
@@ -261,6 +264,19 @@ export const register: Register = on => {
     await tick($)
     $.clock.every(60_000, () => void tick($))
     $.clock.every(PHASE_MS, () => void update($, phase, p => (p + 1) % 1000))
+    $.clock.every(FRAME_MS, () => {
+      frame = (frame + 1) % 1_000_000
+      const at = stage
+      if (at === null) return
+      const { cells } = toCells(critterFrame(at.scene, frame))
+      // a still frame costs nothing
+      if (cells === at.cells) return
+      at.cells = cells
+      void $.ui.blit({ requestId: at.requestId, key: 'critter', cells }).then(r => {
+        // gone from the screen: the next drawing of the band seats it again
+        if (r.deny !== undefined && stage === at) stage = null
+      })
+    })
     // CI moves without any turn of ours, so look again every two minutes
     $.clock.every(120_000, () => void refreshGit($))
     await refreshGit($)
@@ -390,8 +406,11 @@ export const register: Register = on => {
     const need = termBandColumns(band)
     const cols = e.props.bodyColumns
     if (cols < need.compact) {
+      stage = null
       return <Text dimColor>{bandText(figures)}</Text>
     }
+    const critter = toCells(critterFrame(band.critter.scene, frame))
+    stage = { requestId: e.requestId, scene: band.critter.scene, cells: critter.cells }
     const isFull = cols >= need.full
     const line = (l: Line, i: number) => (
       <Text key={String(i)} color={l.color} dimColor={l.dim} bold={l.bold} wrap="truncate">
@@ -404,7 +423,7 @@ export const register: Register = on => {
           <Text color="#ff9ee0" wrap="truncate">
             {band.critter.tag}
           </Text>
-          <Raster key="critter" {...band.critter.cells} />
+          <Raster key="critter" {...critter} />
         </Box>
         {band.meters.map(m => (
           <Box key={m.key} flexDirection="row" columnGap={1}>

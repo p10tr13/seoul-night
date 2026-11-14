@@ -17,12 +17,6 @@ type Pixels = (string | null)[][]
 const paint = (rows: string[], palette: Record<string, string>): Pixels =>
   rows.map(row => [...row].map(c => palette[c] ?? null))
 
-// Pads a sprite at the top to the band's height, so every sprite stands on the same floor.
-const floor = (pixels: Pixels, width: number): Pixels => {
-  const pad = Array.from({ length: Math.max(0, PIXEL_ROWS - pixels.length) }, () => Array<string | null>(width).fill(null))
-  return [...pad, ...pixels]
-}
-
 // The somaek glass, 8 x 12: filled from the bottom with what is left of the 5-hour window.
 export const glassPixels = (left: number | null): Pixels => {
   const W = 8
@@ -113,24 +107,150 @@ const EYES: Partial<Record<CritterState, [number, number][]>> = {
 const OPEN_EYES: [number, number][] = [[4, 3], [4, 4], [11, 3], [11, 4]]
 const SHUT_EYES: [number, number][] = [[3, 4], [4, 4], [5, 4], [10, 4], [11, 4], [12, 4]]
 
-// The critter, 16 x 12: its body and eyes, the eyes shut for a blink when `isBlinking`.
-export const critterPixels = (state: CritterState, isBlinking: boolean): Pixels => {
-  const pixels = floor(paint(critterBody(state), CRITTER_PALETTE), 16)
-  const top = PIXEL_ROWS - 11
-  const eyes = EYES[state] ?? (isBlinking ? SHUT_EYES : OPEN_EYES)
-  for (const [i, j] of eyes) {
-    const row = pixels[top + j]
-    if (row !== undefined) row[i] = CRITTER_INK
-  }
-  // the bright spot in a wide-eyed look
-  if (state === 'error' || state === 'ci-fail' || state === 'long') {
-    for (const [i, j] of [[4, 3], [10, 3]] as const) {
-      const row = pixels[top + j]
-      if (row !== undefined) row[i] = '#ffffff'
-    }
-  }
-  return pixels
+/** The critter's canvas: its body with a pixel to spare each side, and its props to the right. */
+export const CRITTER_W = 23
+/** How often the critter moves a frame. */
+export const FRAME_MS = 250
+
+/** What the critter acts out: its state, and the hour for its coffee. */
+export type CritterScene = { state: CritterState; offHours: 'overtime' | 'weekend' | null }
+
+const blank = (w: number, h: number): Pixels => Array.from({ length: h }, () => Array<string | null>(w).fill(null))
+
+// Paints a sprite onto the canvas at (x, y), clipped to its edges.
+const stamp = (canvas: Pixels, rows: readonly string[], palette: Record<string, string>, x: number, y: number) => {
+  rows.forEach((row, j) => {
+    const line = canvas[y + j]
+    if (line === undefined) return
+    ;[...row].forEach((c, i) => {
+      const color = palette[c]
+      if (color !== undefined && x + i >= 0 && x + i < line.length) line[x + i] = color
+    })
+  })
 }
+
+const at = (canvas: Pixels, cells: readonly (readonly [number, number])[], color: string, x: number, y: number) => {
+  for (const [i, j] of cells) {
+    const line = canvas[y + j]
+    if (line !== undefined && x + i >= 0 && x + i < line.length) line[x + i] = color
+  }
+}
+
+const HEART = ['.h.h.', 'hhhhh', '.hhh.', '..h..']
+const DRIP = ['.b.', 'bbb', '.b.']
+const GLASSES: [number, number][] = [
+  [3, 2], [4, 2], [5, 2], [3, 3], [5, 3], [3, 4], [5, 4], [3, 5], [4, 5], [5, 5],
+  [10, 2], [11, 2], [12, 2], [10, 3], [12, 3], [10, 4], [12, 4], [10, 5], [11, 5], [12, 5],
+  [6, 3], [7, 3], [8, 3], [9, 3],
+]
+
+// How the body moves at this frame: a step up (0 or 1) and a step aside (-1 to 1).
+const motion = (state: CritterState, t: number): { dy: number; dx: number } => {
+  const slow = (period: number) => Math.floor(t / period) % 2
+  switch (state) {
+    case 'bash':
+    case 'long':
+      return { dy: t % 2, dx: 0 }
+    case 'edit':
+      return { dy: slow(2), dx: 0 }
+    case 'web':
+      return { dy: slow(3), dx: 0 }
+    case 'thinking':
+      return { dy: 0, dx: [0, 1, 0, -1][Math.floor(t / 3) % 4] ?? 0 }
+    case 'tipsy':
+      return { dy: 0, dx: [-1, 0, 1, 0][Math.floor(t / 2) % 4] ?? 0 }
+    case 'done':
+      return { dy: t % 3 === 0 ? 0 : 1, dx: 0 }
+    case 'ci-pass':
+      return { dy: t % 2, dx: t % 2 === 0 ? -1 : 1 }
+    case 'error':
+    case 'ci-fail':
+      return { dy: 0, dx: t % 2 === 0 ? -1 : 1 }
+    case 'sleep':
+      return { dy: slow(12), dx: 0 }
+    case 'coffee':
+      return { dy: slow(10), dx: 0 }
+    default:
+      return { dy: slow(8), dx: 0 }
+  }
+}
+
+// What the critter holds or what floats beside it, at this frame.
+const props = (canvas: Pixels, scene: CritterScene, t: number, bx: number, by: number) => {
+  const P = 18 // the props' column
+  switch (scene.state) {
+    case 'thinking': {
+      const dots = Math.floor(t / 2) % 4
+      for (let d = 0; d < dots; d++) at(canvas, [[0, 0]], '#c9a2ff', P + d * 2, 1)
+      return
+    }
+    case 'bash':
+      stamp(canvas, ['kkkkk', t % 2 === 0 ? 'kKkKk' : 'KkKkK', 'kkkkk'], { k: '#2b2f45', K: '#5ff3ff' }, P, 8)
+      return
+    case 'edit':
+      stamp(canvas, ['....Y', '...Y.', '..Y..', '.Y...', 'P....'], { Y: '#ffd23f', P: '#ff9ee0' }, P, 5)
+      if (Math.floor(t / 2) % 2 === 0) stamp(canvas, ['.w.', 'www', '.w.'], { w: '#ffffff' }, P + 2, 0)
+      return
+    case 'read':
+      at(canvas, GLASSES, '#c9e7ff', bx, by)
+      stamp(canvas, ['.mm.', 'm..m', 'm..m', '.mm.', '...h', '....'], { m: '#c9e7ff', h: '#c9a06a' }, P, 5)
+      return
+    case 'web': {
+      const on = Math.floor(t / 2) % 2 === 0
+      stamp(canvas, ['ddd', on ? 'dSd' : 'dsd', on ? 'dsd' : 'dSd', on ? 'dSd' : 'dsd', 'ddd'], { d: '#2b2f45', S: '#5ff3ff', s: '#2a7f99' }, P + 1, 4)
+      return
+    }
+    case 'done':
+      stamp(canvas, HEART, { h: '#ff5fa8' }, P, 7 - (t % 8))
+      return
+    case 'ci-pass':
+      stamp(canvas, HEART, { h: '#ff9ee0' }, P, 7 - (t % 8))
+      stamp(canvas, HEART, { h: '#ff5fa8' }, P, 7 - ((t + 4) % 8))
+      return
+    case 'error':
+    case 'ci-fail':
+      stamp(canvas, DRIP, { b: '#7fd8ff' }, P, 1 + (t % 4) * 2)
+      return
+    case 'long':
+      stamp(canvas, DRIP, { b: '#7fd8ff' }, P, 1 + (t % 4) * 2)
+      stamp(canvas, DRIP, { b: '#7fd8ff' }, P + 2, 1 + ((t + 2) % 4) * 2)
+      return
+    case 'tipsy':
+      if (Math.floor(t / 4) % 3 === 0) stamp(canvas, ['.o.', 'o.o', '.o.'], { o: '#ff9ee0' }, P + 1, 1)
+      return
+    case 'sleep':
+      stamp(canvas, ['ZZZ', '..Z', '.Z.', 'ZZZ'], { Z: '#c9a2ff' }, P + 1, 6 - (Math.floor(t / 2) % 4) * 2)
+      return
+    case 'coffee': {
+      const steam = Math.floor(t / 4) % 2 === 0 ? ['.s..', '..s.'] : ['..s.', '.s..']
+      stamp(canvas, steam, { s: '#c6c0da' }, P, 5)
+      stamp(canvas, ['cccc', 'cccC', 'cccc'], { c: scene.offHours === 'weekend' ? '#ff9ee0' : '#f4efe0', C: '#c6c0da' }, P, 8)
+      return
+    }
+    default:
+      return
+  }
+}
+
+/** The critter at frame `t` (counted in FRAME_MS): its body moving by its state, its eyes, its props. */
+export const critterFrame = (scene: CritterScene, t: number): Pixels => {
+  const { state } = scene
+  const canvas = blank(CRITTER_W, PIXEL_ROWS)
+  const { dy, dx } = motion(state, t)
+  const bx = 1 + dx
+  const by = PIXEL_ROWS - 11 - dy
+  stamp(canvas, critterBody(state), CRITTER_PALETTE, bx, by)
+  // a blink now and then, while nothing else holds its eyes
+  const isBlinking = (state === 'idle' || state === 'coffee' || state === 'thinking') && t % 20 === 19
+  at(canvas, EYES[state] ?? (isBlinking ? SHUT_EYES : OPEN_EYES), CRITTER_INK, bx, by)
+  // the bright spot in a wide-eyed look
+  if (state === 'error' || state === 'ci-fail' || state === 'long') at(canvas, [[4, 3], [10, 3]], '#ffffff', bx, by)
+  props(canvas, scene, t, bx, by)
+  return canvas
+}
+
+/** The critter standing still, as the first frame. */
+export const critterPixels = (state: CritterState): Pixels => critterFrame({ state, offHours: null }, 0)
 
 const DEFAULT = 0x01000000
 const UPPER = 0x2580 // ▀
@@ -180,7 +300,7 @@ export const toCells = (pixels: Pixels): { columns: number; rows: number; cells:
 export type Line = { text: string; color?: string; dim?: boolean; bold?: boolean }
 
 export type TermBand = {
-  critter: { cells: ReturnType<typeof toCells>; tag: string }
+  critter: { scene: CritterScene; tag: string }
   meters: { key: 'glass' | 'bottle' | 'skewer'; cells: ReturnType<typeof toCells>; textColumns: number; lines: Line[] }[]
   day: Line[]
 }
@@ -206,7 +326,7 @@ export const textWidth = (text: string): number => {
 const widest = (lines: readonly Line[]) => Math.max(0, ...lines.map(l => textWidth(l.text)))
 
 /** The critter's column: its body, and room for its longest line. */
-export const CRITTER_COLUMNS = 16
+export const CRITTER_COLUMNS = CRITTER_W
 /** Between the band's columns, and the frame's border and padding on both sides. */
 export const GAP = 2
 const FRAME = 4
@@ -254,7 +374,7 @@ export const termBand = ({ meter, work, git, activity, isWorking, now }: BandFig
   })
 
   return {
-    critter: { cells: toCells(critterPixels(state, false)), tag: phase % 2 === 0 ? tagA : tagB },
+    critter: { scene: { state, offHours: inputs.offHours }, tag: phase % 2 === 0 ? tagA : tagB },
     meters: [
       gauge('glass', toCells(glassPixels(fiveLeft)), [
           { text: '소맥 · 5시간', dim: true },
