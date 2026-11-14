@@ -6,7 +6,7 @@ Mod do Claude Code: ciemny, neonowy motyw w klimacie nocnego Seulu.
 - **Pikselowy pasek nad polem wpisywania**: szklanka somaek (limit 5 h), butelka soju (limit tygodniowy), szaszłyk 어묵 (kontekst rozmowy), czas pracy z 칼퇴 / 야근 / 주말 출근, gałąź git i status CI pull requesta.
 - **Koreańskie napisy** w trakcie pracy Claude'a i `한 잔 할까?` pod polem wpisywania.
 
-Tło i pasek rysują się w aplikacji desktopowej i mobilnej; w terminalu pasek jest jedną linijką tekstu. Status CI wymaga zainstalowanego i zalogowanego `gh`.
+Tło rysuje się w aplikacji desktopowej i mobilnej. Pasek rysuje się wszędzie: w terminalu jako pikselowe sprite'y z półbloków (od 96 kolumn; węższy terminal dostaje jedną linijkę tekstu). Status CI wymaga zainstalowanego i zalogowanego `gh`.
 
 ## Instalacja
 

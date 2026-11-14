@@ -2,17 +2,11 @@
 // that ended, an error, the limits, CI, the hour), each state with a short Korean line above it.
 // Pure: it takes the figures and returns markup.
 
-import type { CiState } from './meter'
+import type { CiState } from '../types'
 
-export type ActivityKind = 'idle' | 'thinking' | 'bash' | 'edit' | 'read' | 'web' | 'done' | 'error' | 'ci-pass'
+import type { Activity, ActivityKind } from '../types'
 
-export type Activity = {
-  kind: ActivityKind
-  /** When this kind began, epoch ms. */
-  since: number
-  /** When the running turn began; null between turns. */
-  turnStartedAt: number | null
-}
+export type { Activity, ActivityKind }
 
 export type CritterState =
   | 'idle'
@@ -204,35 +198,41 @@ const prop = (state: CritterState, x: number, y: number, offHours: CritterInputs
   }
 }
 
+/** The state's two lines, which take turns above the critter. */
+export const critterTags = (state: CritterState, c: CritterInputs): [string, string] => {
+  if (state === 'idle') {
+    const tag = IDLE_TAGS[Math.floor(c.now / 600_000) % IDLE_TAGS.length] ?? TAGS.idle[0]
+    return [tag, tag]
+  }
+  if (state === 'coffee' && c.offHours === 'weekend') return ['주말인데…', '아아 수혈 중']
+  return TAGS[state]
+}
+
+/** The critter's body rows (16 x 11), cheeks by state: shared by the SVG and the terminal. */
+export const critterBody = (state: CritterState): string[] => {
+  const cheek = state === 'tipsy' || state === 'ci-fail' ? 'R' : 'p'
+  return [
+    '..oooooooooooo..',
+    '.oooooooooooooo.',
+    'oooooooooooooooo',
+    'oooooooooooooooo',
+    'oooooooooooooooo',
+    'aooooooooooooooa',
+    `a${cheek}${cheek}oooooooooo${cheek}${cheek}a`,
+    'oooooooooooooooo',
+    '.oooooooooooooo.',
+    '..ll........ll..',
+    '..ll........ll..',
+  ]
+}
+
+export { BODY as CRITTER_PALETTE, INK as CRITTER_INK }
+
 /** The critter at (x, y): its tag above, its body (64 x 44) and whatever it holds. */
 export const critterSvg = (c: CritterInputs, x: number, y: number): string => {
   const state = critterState(c)
-  const cheek = state === 'tipsy' || state === 'ci-fail' ? 'R' : 'p'
-  const body = sprite(
-    [
-      '..oooooooooooo..',
-      '.oooooooooooooo.',
-      'oooooooooooooooo',
-      'oooooooooooooooo',
-      'oooooooooooooooo',
-      'aooooooooooooooa',
-      `a${cheek}${cheek}oooooooooo${cheek}${cheek}a`,
-      'oooooooooooooooo',
-      '.oooooooooooooo.',
-      '..ll........ll..',
-      '..ll........ll..',
-    ],
-    BODY,
-    x,
-    y,
-    4,
-  )
-  let [tagA, tagB] = TAGS[state]
-  if (state === 'idle') {
-    tagA = IDLE_TAGS[Math.floor(c.now / 600_000) % IDLE_TAGS.length] ?? tagA
-    tagB = tagA
-  }
-  if (state === 'coffee' && c.offHours === 'weekend') [tagA, tagB] = ['주말인데…', '아아 수혈 중']
+  const body = sprite(critterBody(state), BODY, x, y, 4)
+  const [tagA, tagB] = critterTags(state, c)
   const tag = (s: string) => `<text x="${x + 32}" y="${y - 10}" font-size="11" fill="#ff9ee0" text-anchor="middle" ${FONT}>${s}</text>`
   return (
     (tagA === tagB ? tag(tagA) : frames(tag(tagA), tag(tagB), TAG_SECONDS)) +

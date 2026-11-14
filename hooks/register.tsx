@@ -8,6 +8,8 @@ import { makeColors } from './make-colors.js'
 import { bandSvg, bandText } from './meter'
 import type { CiState } from './meter'
 import { SCENE } from './scene'
+import { TERM_BAND_COLUMNS, termBand } from './term'
+import type { Line } from './term'
 
 // A Korean city at night: indigo sky, neon pink and cyan, warm windows.
 const { theme, problems } = makeColors({
@@ -49,6 +51,9 @@ const work = atom({ plugin: 'seoul-night', key: 'work' } as const, null)
 const git = atom({ plugin: 'seoul-night', key: 'git' } as const, null)
 const now = atom({ plugin: 'seoul-night', key: 'now' } as const, 0)
 const activity = atom({ plugin: 'seoul-night', key: 'activity' } as const, null)
+// Flips every few seconds: the terminal critter's two lines take turns by it.
+const phase = atom({ plugin: 'seoul-night', key: 'phase' } as const, 0)
+const PHASE_MS = 8000
 
 // What the line says while a turn runs: drawn at random per kind of work, and again every few seconds.
 const WORDS = {
@@ -255,6 +260,7 @@ export const register: Register = on => {
     await update($, work, w => ({ startedAt: usage.startedAt, turns: w?.turns ?? 0, utcOffsetMin: offset }))
     await tick($)
     $.clock.every(60_000, () => void tick($))
+    $.clock.every(PHASE_MS, () => void update($, phase, p => (p + 1) % 1000))
     // CI moves without any turn of ours, so look again every two minutes
     $.clock.every(120_000, () => void refreshGit($))
     await refreshGit($)
@@ -374,8 +380,56 @@ export const register: Register = on => {
 
       return <Svg source={bandSvg(figures)} alt={bandText(figures)} />
     }
-    const { Text } = $.ui.resolve(e)
+    if (e.surface !== 'terminal') {
+      const { Text } = $.ui.resolve(e)
+      return <Text dimColor>{bandText(figures)}</Text>
+    }
+    const { Box, Raster, Text } = $.ui.resolve(e)
 
-    return <Text dimColor>{bandText(figures)}</Text>
+    const cols = e.props.bodyColumns
+    if (cols < TERM_BAND_COLUMNS.compact) {
+      return <Text dimColor>{bandText(figures)}</Text>
+    }
+    const isFull = cols >= TERM_BAND_COLUMNS.full
+    const band = termBand(figures, await read($, phase))
+    const line = (l: Line, i: number) => (
+      <Text key={String(i)} color={l.color} dimColor={l.dim} bold={l.bold} wrap="truncate">
+        {l.text === '' ? ' ' : l.text}
+      </Text>
+    )
+    const meters = (
+      <Box flexDirection="row" columnGap={2}>
+        <Box flexDirection="column" alignItems="center" width={16}>
+          <Text color="#ff9ee0" wrap="truncate">
+            {band.critter.tag}
+          </Text>
+          <Raster key="critter" {...band.critter.cells} />
+        </Box>
+        {band.meters.map(m => (
+          <Box key={m.key} flexDirection="row" columnGap={1}>
+            <Raster key={m.key} {...m.cells} />
+            <Box flexDirection="column" justifyContent="flex-end" width={m.textColumns}>
+              {m.lines.map(line)}
+            </Box>
+          </Box>
+        ))}
+        {isFull ? (
+          <Box flexDirection="column" justifyContent="flex-end" alignItems="flex-end" flexGrow={1}>
+            {band.day.map(line)}
+          </Box>
+        ) : null}
+      </Box>
+    )
+
+    return (
+      <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor="#3a2a5c">
+        {meters}
+        {isFull ? null : (
+          <Box flexDirection="row" columnGap={2}>
+            {band.day.filter(l => l.text !== '').map(line)}
+          </Box>
+        )}
+      </Box>
+    )
   })
 }

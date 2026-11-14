@@ -6,35 +6,9 @@
 import { CRITTER_CSS, critterSvg } from './critter'
 import type { Activity } from './critter'
 
-export type Meter = {
-  /** Percent used of the 5-hour window; null before the first reading or off a subscription. */
-  fiveHour: number | null
-  fiveResetsAt: string | null
-  week: number | null
-  weekResetsAt: string | null
-  /** Percent of the context window filled. */
-  context: number | null
-}
+import type { CiState, Git, Meter, Work } from '../types'
 
-export type Work = {
-  /** When the session began, epoch ms. */
-  startedAt: number
-  turns: number
-  /** The machine's offset from UTC in minutes, as git reports it; null when unknown. */
-  utcOffsetMin: number | null
-}
-
-export type CiState = 'pass' | 'fail' | 'pending'
-
-export type Git = {
-  branch: string | null
-  /** Files changed and not committed. */
-  dirty: number
-  /** Commits not pushed to the upstream. */
-  ahead: number
-  pr: number | null
-  ci: CiState | null
-}
+export type { CiState, Git, Meter, Work }
 
 export type BandFigures = {
   meter: Meter | null
@@ -69,9 +43,9 @@ const sprite = (rows: string[], palette: Record<string, string>, x: number, y: n
   return out
 }
 
-const clamp = (n: number) => Math.max(0, Math.min(100, n))
+export const clamp = (n: number) => Math.max(0, Math.min(100, n))
 
-const untilReset = (iso: string | null, now: number): string | null => {
+export const untilReset = (iso: string | null, now: number): string | null => {
   if (iso === null) return null
   const ms = Date.parse(iso) - now
   if (!Number.isFinite(ms) || ms <= 0) return '곧 리셋'
@@ -82,10 +56,10 @@ const untilReset = (iso: string | null, now: number): string | null => {
   return hours % 24 === 0 ? `${hours / 24}일 후 리셋` : `${Math.floor(hours / 24)}일 ${hours % 24}시간 후 리셋`
 }
 
-const hm = (minutes: number) => `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, '0')}`
+export const hm = (minutes: number) => `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, '0')}`
 
 // The workday by the machine's own clock: the weekend, overtime after 18:00, or time to leave.
-const workday = (now: number, offset: number | null): { label: string; color: string } => {
+export const workday = (now: number, offset: number | null): { label: string; color: string } => {
   if (offset === null) return { label: '근무 중', color: '#5ff3ff' }
   const local = new Date(now + offset * 60000)
   const day = local.getUTCDay()
@@ -211,7 +185,7 @@ const skewer = (filled: number | null, x: number, y: number): string => {
   return out
 }
 
-const offHoursOf = (now: number, offset: number | null): 'overtime' | 'weekend' | null => {
+export const offHoursOf = (now: number, offset: number | null): 'overtime' | 'weekend' | null => {
   if (offset === null) return null
   const local = new Date(now + offset * 60000)
   const day = local.getUTCDay()
@@ -222,7 +196,7 @@ const offHoursOf = (now: number, offset: number | null): 'overtime' | 'weekend' 
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
-const ciLabel = (git: Git | null): { label: string; color: string } => {
+export const ciLabel = (git: Git | null): { label: string; color: string } => {
   if (git === null) return { label: '', color: '#9d96b8' }
   if (git.pr === null) return { label: 'PR 없음', color: '#9d96b8' }
   if (git.ci === 'pass') return { label: `PR #${git.pr} · CI 통과`, color: '#55e0b0' }
