@@ -188,18 +188,26 @@ const refreshGit = async ($: EngineInterface) => {
 }
 
 // What the critter is doing; a passing state is redrawn away once its time is up.
-const setActivity = async ($: EngineInterface, kind: ActivityKind, turnStartedAt?: number | null) => {
+// The desktop draws the band as an image and redraws it with a lag, so each write here costs a
+// visible redraw: a kind that has not changed is not written again. Returns the kind's `since`.
+const setActivity = async ($: EngineInterface, kind: ActivityKind, turnStartedAt?: number | null): Promise<number> => {
+  const current = await read($, activity)
+  const startedAt = turnStartedAt === undefined ? (current?.turnStartedAt ?? null) : turnStartedAt
+  const isPassing = kind === 'done' || kind === 'error' || kind === 'ci-pass'
+  if (current !== null && current.kind === kind && current.turnStartedAt === startedAt && !isPassing) {
+    return current.since
+  }
   const at = await $.clock.now()
-  await update($, activity, a => ({
-    kind,
-    since: at,
-    turnStartedAt: turnStartedAt === undefined ? (a?.turnStartedAt ?? null) : turnStartedAt,
-  }))
+  await update($, activity, () => ({ kind, since: at, turnStartedAt: startedAt }))
   await update($, now, () => at)
-  if (kind === 'done' || kind === 'error' || kind === 'ci-pass') {
+  if (isPassing) {
     $.clock.after(TRANSIENT_MS[kind] + 300, () => void tick($))
   }
+  return at
 }
+
+/** How long the critter keeps a tool's look after the tool ends, so quick tools do not flicker. */
+const HOLD_TOOL_MS = 4000
 
 const toolKind = (tool: string): ActivityKind => {
   if (tool === 'Bash' || tool === 'PowerShell') return 'bash'
@@ -246,7 +254,7 @@ export const register: Register = on => {
     const offset = await utcOffset($)
     await update($, work, w => ({ startedAt: usage.startedAt, turns: w?.turns ?? 0, utcOffsetMin: offset }))
     await tick($)
-    $.clock.every(30_000, () => void tick($))
+    $.clock.every(60_000, () => void tick($))
     // CI moves without any turn of ours, so look again every two minutes
     $.clock.every(120_000, () => void refreshGit($))
     await refreshGit($)
@@ -271,11 +279,21 @@ export const register: Register = on => {
   on('tool.call', async ($, e, next) => {
     const step = stepOfTool(e.tool)
     running = step === null ? null : { step, file: fileOfInput(e) }
-    await setActivity($, toolKind(e.tool))
+    const since = await setActivity($, toolKind(e.tool))
     const result = await next(e)
     running = null
     const failed = result.deny !== undefined || result.isError === true
-    await setActivity($, failed ? 'error' : 'thinking')
+    if (failed) {
+      await setActivity($, 'error')
+    } else {
+      // back to thinking only if no other tool or turn end came along meanwhile
+      $.clock.after(HOLD_TOOL_MS, () => {
+        void (async () => {
+          const a = await read($, activity)
+          if (a !== null && a.since === since && a.kind === toolKind(e.tool)) await setActivity($, 'thinking')
+        })()
+      })
+    }
 
     return result
   })

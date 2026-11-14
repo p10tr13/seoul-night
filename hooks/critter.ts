@@ -42,7 +42,7 @@ export type CritterInputs = {
 }
 
 /** How long a passing state shows before the critter settles again. */
-export const TRANSIENT_MS = { done: 6000, error: 5000, 'ci-pass': 10000 } as const
+export const TRANSIENT_MS = { done: 15000, error: 7000, 'ci-pass': 15000 } as const
 const LONG_TURN_MS = 120_000
 
 export const critterState = (c: CritterInputs): CritterState => {
@@ -61,6 +61,9 @@ export const critterState = (c: CritterInputs): CritterState => {
   if (c.offHours !== null) return 'coffee'
   return 'idle'
 }
+
+// How long each of a state's two lines stays up before the other takes its turn.
+const TAG_SECONDS = 8
 
 const FONT = `font-family="'Galmuri11','DungGeunMo','Malgun Gothic','Apple SD Gothic Neo',monospace"`
 
@@ -232,7 +235,7 @@ export const critterSvg = (c: CritterInputs, x: number, y: number): string => {
   if (state === 'coffee' && c.offHours === 'weekend') [tagA, tagB] = ['주말인데…', '아아 수혈 중']
   const tag = (s: string) => `<text x="${x + 32}" y="${y - 10}" font-size="11" fill="#ff9ee0" text-anchor="middle" ${FONT}>${s}</text>`
   return (
-    (tagA === tagB ? tag(tagA) : frames(tag(tagA), tag(tagB), 1.2)) +
+    (tagA === tagB ? tag(tagA) : frames(tag(tagA), tag(tagB), TAG_SECONDS)) +
     `<g ${MOTION[state]}>${body}${eyes(state, x, y)}${prop(state, x, y, c.offHours)}</g>`
   )
 }
