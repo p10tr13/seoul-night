@@ -47,11 +47,46 @@ const work = atom({ plugin: 'seoul-night', key: 'work' } as const, null)
 const git = atom({ plugin: 'seoul-night', key: 'git' } as const, null)
 const now = atom({ plugin: 'seoul-night', key: 'now' } as const, 0)
 
-// What the line says while a turn runs, picked per turn and per kind of work.
+// What the line says while a turn runs: drawn at random per kind of work, and again every few seconds.
 const WORDS = {
   thinking: ['눈치 보는 중', '라면 물 올리는 중', '아아 수혈 중', '코드랑 썸 타는 중', '노래방 100점 노리는 중'],
   tools: ['빨리빨리 하는 중', '일하는 척하는 중', '야근 각 재는 중', '버그한테 고백하는 중', 'PC방에서 밤새는 중'],
   reply: ['카톡 답장 쓰는 중', '소주 뚜껑 돌리는 중', '치맥 시키는 중', '드라마 대사 외우는 중'],
+}
+const ROTATE_MS = 8000
+
+// The desktop's description of a tool step (`Creating notes.md`, `Running a command`), told in Korean.
+// `{x}` is the file or thing the step names; a step that names none takes the bare phrase.
+const STEPS: { verbs: RegExp; named: string[]; bare: string[] }[] = [
+  { verbs: /^(creating|writing)\b/i, named: ['{x} 빚는 중', '{x} 뚝딱 만드는 중', '{x} 출산 중'], bare: ['뭔가 뚝딱 만드는 중'] },
+  { verbs: /^(editing|updating|modifying)\b/i, named: ['{x} 손보는 중', '{x} 성형 중', '{x} 화장 고치는 중'], bare: ['코드 성형 중'] },
+  { verbs: /^(reading|viewing|opening)\b/i, named: ['{x} 정독하는 중', '{x} 훑어보는 중'], bare: ['정독하는 중'] },
+  { verbs: /^(running|executing)\b/i, named: [], bare: ['명령어 돌리는 중', '터미널에 주문 넣는 중', '엔터 꾹 누르는 중'] },
+  { verbs: /^(searching|finding|listing|grepping|globbing|looking)\b/i, named: [], bare: ['구석구석 뒤지는 중', '숨은 그림 찾는 중'] },
+  { verbs: /^(fetching|browsing|downloading)\b/i, named: [], bare: ['인터넷 서핑 중', '네이버에 물어보는 중'] },
+]
+
+const pickFrom = (pool: readonly string[], avoid?: string): string | undefined => {
+  const choices = pool.length > 1 && avoid !== undefined ? pool.filter(p => p !== avoid) : pool
+  return choices[Math.floor(Math.random() * choices.length)]
+}
+
+// A file or path the step names, as its last segment; a plain phrase (`a command`) names nothing.
+const namedThing = (rest: string): string | null => {
+  const token = rest.trim().split(/\s+/)[0] ?? ''
+  if (!/[./\\]/.test(token)) return null
+  return token.split(/[\\/]/).filter(Boolean).pop() ?? null
+}
+
+const stepInKorean = (word: string): string | null => {
+  for (const step of STEPS) {
+    const match = word.match(step.verbs)
+    if (!match) continue
+    const thing = namedThing(word.slice(match[0].length))
+    const phrase = thing !== null && step.named.length > 0 ? pickFrom(step.named) : pickFrom(step.bare)
+    return phrase === undefined ? null : phrase.replace('{x}', thing ?? '')
+  }
+  return null
 }
 const HINT = '한 잔 할까?'
 
@@ -134,7 +169,9 @@ const tick = async ($: EngineInterface) => {
 }
 
 export const register: Register = on => {
-  let turnNo = 0
+  // the phrase on the line now, and each tool step's phrase
+  let shown: { pool: readonly string[]; word: string; at: number } | null = null
+  const stepPhrases = new Map<string, string>()
 
   on('session.start', async ($, e, next) => {
     const unpainted = problems.find(line => line.startsWith("Desktop won't paint"))
@@ -167,7 +204,8 @@ export const register: Register = on => {
   })
 
   on('prompt.submit', ($, e, next) => {
-    turnNo += 1
+    // a new turn starts with a fresh phrase
+    shown = null
 
     return next(e)
   })
@@ -180,16 +218,30 @@ export const register: Register = on => {
     return next(e)
   })
 
-  on('ui.render', { component: 'Spinner' }, ($, e, next) => {
+  on('ui.render', { component: 'Spinner' }, async ($, e, next) => {
     const { mode, word, message } = e.props
-    // keep a state's own message, and the desktop's description of a tool step
-    const isToolStep = (mode === 'tool-use' || mode === 'tool-input') && e.surface === 'desktop' && word !== 'Working'
-    if (message !== null || isToolStep) {
+    // a state's own message stays as it is
+    if (message !== null) {
       return next(e)
+    }
+    const isToolStep = (mode === 'tool-use' || mode === 'tool-input') && e.surface === 'desktop' && word !== 'Working'
+    if (isToolStep) {
+      // one phrase per step, so the line does not flicker while the step runs
+      let phrase = stepPhrases.get(word)
+      if (phrase === undefined) {
+        phrase = stepInKorean(word) ?? word
+        if (stepPhrases.size > 200) stepPhrases.clear()
+        stepPhrases.set(word, phrase)
+      }
+      return next({ ...e, props: { ...e.props, word: phrase } })
     }
     const pool =
       mode === 'tool-use' || mode === 'tool-input' ? WORDS.tools : mode === 'responding' ? WORDS.reply : WORDS.thinking
-    const picked = pool[(turnNo * 7 + mode.length) % pool.length] ?? word
+    const at = await $.clock.now()
+    if (shown === null || shown.pool !== pool || at - shown.at > ROTATE_MS) {
+      shown = { pool, word: pickFrom(pool, shown?.word) ?? word, at }
+    }
+    const picked = shown.word
 
     return next({ ...e, props: { ...e.props, word: picked } })
   })
