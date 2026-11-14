@@ -508,13 +508,15 @@ const CSS = [
   '@keyframes lp{38%{opacity:.55}44%{opacity:1}71%{opacity:.75}80%{opacity:1}}',
   '.a1{animation-delay:-1.3s}.a2{animation-delay:-2.9s}.a3{animation-delay:-4.1s}',
   '@media (prefers-reduced-motion:reduce){*{animation:none!important}}',
-].join('');
+].join('\n');
 
 const staticArt = vectorize((x, y) => buf[y * W + x], 0, 0, W, H);
 function build(b) {
   B.on = b;
   const parts = { art: staticArt, halos: halos(), windows: windows(), reflections: reflections(), glints: glints(), lanterns: lanterns() };
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" preserveAspectRatio="xMidYMid slice" shape-rendering="crispEdges">${b ? "" : `<style>${CSS}</style>`}<rect width="640" height="360" fill="#050a20"/><g fill="none">${Object.values(parts).join('')}</g></svg>`;
+  // The desktop app runs a scene's animations only with its CSS one rule per line and no
+  // shape-rendering on the root, so crisp pixels are asked for on a group inside instead.
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" preserveAspectRatio="xMidYMid slice">${b ? "" : `<style>\n${CSS}\n</style>`}<rect width="640" height="360" fill="#050a20"/><g fill="none" shape-rendering="crispEdges">${Object.values(parts).join('')}</g></svg>`;
   return { svg, parts };
 }
 const a = build(false), b = build(true);

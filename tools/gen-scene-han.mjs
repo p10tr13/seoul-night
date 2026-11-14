@@ -625,6 +625,18 @@ const CSS =
   '@keyframes hn-b{60%{opacity:.15}}' +
   '@media (prefers-reduced-motion: reduce){*{animation:none!important}}';
 
+/** One top-level CSS rule per line, with a newline before the first and after the last. */
+function cssLines(css) {
+  let out = '\n';
+  let depth = 0;
+  for (const ch of css) {
+    out += ch;
+    if (ch === '{') depth++;
+    if (ch === '}' && --depth === 0) out += '\n';
+  }
+  return out;
+}
+
 const parts = {};
 for (const n of Object.keys(anim)) parts[n] = anim[n].svg();
 const staticParts = { water: water.svg(), bg: bg.svg(), det: det.svg(), top: top.svg() };
@@ -633,8 +645,10 @@ const staticParts = { water: water.svg(), bg: bg.svg(), det: det.svg(), top: top
 function build(mode) {
   const b = mode === 'b';
   const g = (n, override, rest) => `<g class="hn-${n}"${b ? (override ? ' ' + override : '') : rest ? ' ' + rest : ''}>${parts[n] ?? ''}</g>`;
-  let s = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" preserveAspectRatio="xMidYMid slice" shape-rendering="crispEdges">';
-  s += `<style>${CSS}</style>`;
+  // The desktop app runs a scene's animations only with its CSS one rule per line and no
+  // shape-rendering on the root, so crisp pixels are asked for on a group inside instead.
+  let s = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" preserveAspectRatio="xMidYMid slice">';
+  s += `<style>${cssLines(CSS)}</style><g shape-rendering="crispEdges">`;
   s += bands(skyC, skyY) + bands(watC, watY) + staticParts.water;
   s += g('s0', 'transform="translate(1 0)"') + g('s1', 'transform="translate(-1 0)"');
   s += staticParts.bg + staticParts.det;
@@ -647,7 +661,7 @@ function build(mode) {
   blinks.forEach(([x, y], i) => {
     s += `<rect class="hn-b${i % 3}"${b && i % 3 !== 1 ? ' opacity=".15"' : ''} x="${x}" y="${y}" width="1" height="1" fill="#ff2b46"/>`;
   });
-  s += staticParts.top + '</svg>';
+  s += staticParts.top + '</g></svg>';
   return s;
 }
 
