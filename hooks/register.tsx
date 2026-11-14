@@ -8,7 +8,7 @@ import { makeColors } from './make-colors.js'
 import { bandSvg, bandText } from './meter'
 import type { CiState } from './meter'
 import { SCENE } from './scene'
-import { TERM_BAND_COLUMNS, termBand } from './term'
+import { CRITTER_COLUMNS, GAP, termBand, termBandColumns } from './term'
 import type { Line } from './term'
 
 // A Korean city at night: indigo sky, neon pink and cyan, warm windows.
@@ -386,20 +386,21 @@ export const register: Register = on => {
     }
     const { Box, Raster, Text } = $.ui.resolve(e)
 
+    const band = termBand(figures, await read($, phase))
+    const need = termBandColumns(band)
     const cols = e.props.bodyColumns
-    if (cols < TERM_BAND_COLUMNS.compact) {
+    if (cols < need.compact) {
       return <Text dimColor>{bandText(figures)}</Text>
     }
-    const isFull = cols >= TERM_BAND_COLUMNS.full
-    const band = termBand(figures, await read($, phase))
+    const isFull = cols >= need.full
     const line = (l: Line, i: number) => (
       <Text key={String(i)} color={l.color} dimColor={l.dim} bold={l.bold} wrap="truncate">
         {l.text === '' ? ' ' : l.text}
       </Text>
     )
     const meters = (
-      <Box flexDirection="row" columnGap={2}>
-        <Box flexDirection="column" alignItems="center" width={16}>
+      <Box flexDirection="row" columnGap={GAP}>
+        <Box flexDirection="column" alignItems="center" width={CRITTER_COLUMNS}>
           <Text color="#ff9ee0" wrap="truncate">
             {band.critter.tag}
           </Text>
@@ -414,7 +415,7 @@ export const register: Register = on => {
           </Box>
         ))}
         {isFull ? (
-          <Box flexDirection="column" justifyContent="flex-end" alignItems="flex-end" flexGrow={1}>
+          <Box flexDirection="column" justifyContent="flex-end">
             {band.day.map(line)}
           </Box>
         ) : null}
@@ -422,10 +423,10 @@ export const register: Register = on => {
     )
 
     return (
-      <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor="#3a2a5c">
+      <Box flexDirection="column" alignSelf="flex-start" paddingX={1} borderStyle="round" borderColor="#3a2a5c">
         {meters}
         {isFull ? null : (
-          <Box flexDirection="row" columnGap={2}>
+          <Box flexDirection="row" columnGap={GAP}>
             {band.day.filter(l => l.text !== '').map(line)}
           </Box>
         )}

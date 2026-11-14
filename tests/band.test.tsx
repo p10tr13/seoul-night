@@ -28,7 +28,7 @@ test('a wide terminal draws the pixel band with the workday beside it', async $ 
 })
 
 test('a middling terminal keeps the pixels', async $ => {
-  const ui = await $.ui.mount(band(100))
+  const ui = await $.ui.mount(band(88))
 
   expect(await ui.find({ type: 'Raster', key: 'glass' })).toBeTruthy()
   await ui.unmount()

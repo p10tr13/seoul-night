@@ -185,11 +185,41 @@ export type TermBand = {
   day: Line[]
 }
 
+/** How many terminal columns a text takes: Hangul and other wide letters take two. */
+export const textWidth = (text: string): number => {
+  let n = 0
+  for (const ch of text) {
+    const c = ch.codePointAt(0) ?? 0
+    const wide =
+      (c >= 0x1100 && c <= 0x115f) ||
+      (c >= 0x2e80 && c <= 0xa4cf) ||
+      (c >= 0xac00 && c <= 0xd7a3) ||
+      (c >= 0xf900 && c <= 0xfaff) ||
+      (c >= 0xfe30 && c <= 0xfe4f) ||
+      (c >= 0xff00 && c <= 0xff60) ||
+      (c >= 0xffe0 && c <= 0xffe6)
+    n += wide ? 2 : 1
+  }
+  return n
+}
+
+const widest = (lines: readonly Line[]) => Math.max(0, ...lines.map(l => textWidth(l.text)))
+
+/** The critter's column: its body, and room for its longest line. */
+export const CRITTER_COLUMNS = 16
+/** Between the band's columns, and the frame's border and padding on both sides. */
+export const GAP = 2
+const FRAME = 4
+
 /**
- * The columns the band needs: from `full` the workday stands in a column at the right; from
- * `compact` it goes on a line under the pixels; narrower terminals get the one line of text.
+ * The columns the band needs, by what it says now: from `full` the workday stands in a column
+ * after the skewer; from `compact` it goes on a line under the pixels; below that, one line of text.
  */
-export const TERM_BAND_COLUMNS = { full: 124, compact: 96 } as const
+export const termBandColumns = (band: TermBand): { full: number; compact: number } => {
+  const meters = band.meters.reduce((sum, m) => sum + m.cells.columns + 1 + m.textColumns + GAP, 0)
+  const compact = FRAME + CRITTER_COLUMNS + meters
+  return { compact, full: compact + GAP + widest(band.day) }
+}
 
 /** The band for the terminal; `phase` flips each few seconds (the tag's turn, a blink). */
 export const termBand = ({ meter, work, git, activity, isWorking, now }: BandFigures, phase: number): TermBand => {
@@ -216,38 +246,30 @@ export const termBand = ({ meter, work, git, activity, isWorking, now }: BandFig
   const gitLine =
     git === null ? '' : `git ${shortBranch}${git.dirty > 0 ? ` ●${git.dirty}` : ''}${git.ahead > 0 ? ` ↑${git.ahead}` : ''}`
 
+  const gauge = (key: 'glass' | 'bottle' | 'skewer', cells: ReturnType<typeof toCells>, lines: Line[]) => ({
+    key,
+    cells,
+    textColumns: widest(lines),
+    lines,
+  })
+
   return {
     critter: { cells: toCells(critterPixels(state, false)), tag: phase % 2 === 0 ? tagA : tagB },
     meters: [
-      {
-        key: 'glass',
-        textColumns: 18,
-        cells: toCells(glassPixels(fiveLeft)),
-        lines: [
+      gauge('glass', toCells(glassPixels(fiveLeft)), [
           { text: '소맥 · 5시간', dim: true },
           { text: `${pct(fiveLeft)} 남음`, bold: true, color: fiveLeft === null ? '#9d96b8' : fiveLeft < 20 ? '#ff5468' : '#ffcf4a' },
           { text: fiveNote, color: fiveLeft !== null && fiveLeft < 20 ? '#ff5468' : '#9d96b8' },
-        ],
-      },
-      {
-        key: 'bottle',
-        textColumns: 18,
-        cells: toCells(bottlePixels(weekLeft)),
-        lines: [
+      ]),
+      gauge('bottle', toCells(bottlePixels(weekLeft)), [
           { text: '소주 · 이번 주', dim: true },
           { text: `${pct(weekLeft)} 남음`, bold: true, color: weekLeft !== null && weekLeft < 20 ? '#ff5468' : '#7dffb0' },
           { text: weekNote, color: '#9d96b8' },
-        ],
-      },
-      {
-        key: 'skewer',
-        textColumns: 12,
-        cells: toCells(skewerPixels(ctx)),
-        lines: [
+      ]),
+      gauge('skewer', toCells(skewerPixels(ctx)), [
           { text: '어묵 · 대화', dim: true },
           { text: `${pct(ctx === null ? null : 100 - clamp(ctx))} 남음`, bold: true, color: '#f6c987' },
-        ],
-      },
+      ]),
     ],
     day: [
       { text: worked === null ? '' : `근무 ${hm(worked)} · 턴 ${work?.turns ?? 0}`, dim: true },
