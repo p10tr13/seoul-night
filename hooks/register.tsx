@@ -7,7 +7,8 @@ import type { ActivityKind } from './critter'
 import { makeColors } from './make-colors.js'
 import { bandSvg, bandText } from './meter'
 import type { CiState } from './meter'
-import { SCENE } from './scene'
+import { SCENE as SCENE_ALLEY } from './scene'
+import { SCENE as SCENE_HAN } from './scene-han'
 import { CRITTER_COLUMNS, FRAME_MS, GAP, critterFrame, termBand, termBandColumns, toCells } from './term'
 import type { CritterScene, Line } from './term'
 
@@ -37,12 +38,30 @@ const { theme, problems } = makeColors({
   },
 })
 
-const LOOK: ThemeSetArgs = {
+// The backdrops to choose from with /tlo; the choice is kept across sessions in the mod's store.
+const SCENES = {
+  han: { source: SCENE_HAN, alt: 'Rzeka Han nocą: wzgórze Namsan z wieżą, bloki i długi most ze światłami samochodów', label: 'Han nocą z Namsan' },
+  alley: { source: SCENE_ALLEY, alt: 'Neonowa uliczka nocą z namiotem pocha, stolikami z soju i małymi stworkami', label: 'neonowa uliczka z pocha' },
+} as const
+type SceneName = keyof typeof SCENES
+const DEFAULT_SCENE: SceneName = 'han'
+const STORE_SCENE = 'scene'
+const isScene = (name: unknown): name is SceneName => typeof name === 'string' && name in SCENES
+
+// Scene names reach the surface prefixed, so another mod's backdrop is never mistaken for ours.
+const SCENE_PREFIX = 'seoul-night-'
+
+const lookWith = (scene: SceneName): ThemeSetArgs => ({
   colors: theme,
   backdrop: {
-    scene: 'seoul-night',
+    scene: `${SCENE_PREFIX}${scene}`,
     glass: { blur: 18, tint: '#0c0b1f', opacity: 0.6 },
   },
+})
+
+const chosenScene = async ($: EngineInterface): Promise<SceneName> => {
+  const stored = await $.store.get(STORE_SCENE)
+  return isScene(stored) ? stored : DEFAULT_SCENE
 }
 
 // What the band above the prompt draws from.
@@ -252,11 +271,15 @@ export const register: Register = on => {
     if (unpainted !== undefined) {
       $.ui.toast(unpainted)
     }
-    const set = await $.theme.set(LOOK)
+    const set = await $.theme.set(lookWith(await chosenScene($)))
 
     if (!set.isDrawn) {
       $.ui.status(set.reason)
     }
+    await $.command.register({
+      name: 'tlo',
+      description: `Zmienia tło: ${Object.keys(SCENES).join(', ')}`,
+    })
     const usage = await $.session.usage()
     await update($, meter, () => toMeter(usage.rateLimits, usage.context.percent))
     const offset = await utcOffset($)
@@ -369,13 +392,32 @@ export const register: Register = on => {
     return next({ ...e, props: { ...e.props, hint } })
   })
 
+  on('command.run', { command: 'tlo' }, async ($, e) => {
+    const name = e.args.trim().toLowerCase()
+    const list = (Object.entries(SCENES) as [SceneName, (typeof SCENES)[SceneName]][])
+      .map(([key, s]) => `${key}: ${s.label}`)
+      .join('\n')
+    if (name === '') {
+      return { text: `Teraz: ${await chosenScene($)}. Do wyboru:\n${list}` }
+    }
+    if (!isScene(name)) {
+      return { text: `Nie znam tła „${name}”. Do wyboru:\n${list}` }
+    }
+    await $.store.set(STORE_SCENE, name)
+    await $.theme.set(lookWith(name))
+
+    return { text: `Tło: ${SCENES[name].label}.` }
+  })
+
   on('ui.render', { component: 'Backdrop' }, ($, e, next) => {
-    if ((e.surface !== 'desktop' && e.surface !== 'mobile') || e.props.scene !== 'seoul-night') {
+    const name = e.props.scene.startsWith(SCENE_PREFIX) ? e.props.scene.slice(SCENE_PREFIX.length) : null
+    if ((e.surface !== 'desktop' && e.surface !== 'mobile') || !isScene(name)) {
       return next(e)
     }
     const { Svg } = $.ui.resolve(e)
+    const scene = SCENES[name]
 
-    return <Svg source={SCENE} alt="Neonowa uliczka nocą z namiotem pocha, stolikami z soju i małymi stworkami" isInteractive />
+    return <Svg source={scene.source} alt={scene.alt} isInteractive />
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
