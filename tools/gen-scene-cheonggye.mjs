@@ -494,11 +494,12 @@ function reflections() {
 }
 
 const CSS = [
-  '.sw{transform-box:fill-box;transform-origin:50% 0;animation:sw 5s steps(6) infinite alternate}',
-  '.sx{animation-duration:6.4s}',
-  '@keyframes sw{from{transform:rotate(-3.5deg)}to{transform:rotate(3.5deg)}}',
-  '.rf{animation:rf 3.2s step-end infinite}',
-  '@keyframes rf{35%{transform:translate(1px,1px)}70%{transform:translate(-1px,0)}}',
+  // the swing has to move the lantern's foot by a few grid pixels to be seen at all
+  '.sw{transform-box:fill-box;transform-origin:50% 0;animation:sw 3.6s steps(8) infinite alternate}',
+  '.sx{animation-duration:4.6s}',
+  '@keyframes sw{from{transform:rotate(-10deg)}to{transform:rotate(10deg)}}',
+  '.rf{animation:rf 2.4s step-end infinite}',
+  '@keyframes rf{25%{transform:translate(2px,1px)}50%{transform:translate(-1px,0)}75%{transform:translate(-2px,1px)}}',
   '.gl{animation:gl 4.5s step-end infinite}',
   '@keyframes gl{40%{opacity:.15}75%{opacity:1}}',
   '.wn{animation:wn 14s step-end infinite}',
