@@ -1,0 +1,5 @@
+{
+  "name": "seoul-night",
+  "owner": { "name": "p10tr13" },
+  "plugins": [{ "name": "seoul-night", "source": "./" }]
+}
