@@ -8,6 +8,7 @@ import { makeColors } from './make-colors.js'
 import { bandSvg, bandText } from './meter'
 import type { CiState } from './meter'
 import { SCENE as SCENE_ALLEY } from './scene'
+import { SCENE as SCENE_CHEONGGYE } from './scene-cheonggye'
 import { SCENE as SCENE_HAN } from './scene-han'
 import { CRITTER_COLUMNS, FRAME_MS, GAP, critterFrame, termBand, termBandColumns, toCells } from './term'
 import type { CritterScene, Line } from './term'
@@ -41,6 +42,7 @@ const { theme, problems } = makeColors({
 // The backdrops to choose from with /tlo; the choice is kept across sessions in the mod's store.
 const SCENES = {
   han: { source: SCENE_HAN, alt: 'Rzeka Han nocą: wzgórze Namsan z wieżą, bloki i długi most ze światłami samochodów', label: 'Han nocą z Namsan' },
+  cheonggye: { source: SCENE_CHEONGGYE, alt: 'Strumień Cheonggyecheon o zmierzchu, biurowce i kołyszące się kolorowe lampiony', label: 'Cheonggyecheon z lampionami' },
   alley: { source: SCENE_ALLEY, alt: 'Neonowa uliczka nocą z namiotem pocha, stolikami z soju i małymi stworkami', label: 'neonowa uliczka z pocha' },
 } as const
 type SceneName = keyof typeof SCENES
