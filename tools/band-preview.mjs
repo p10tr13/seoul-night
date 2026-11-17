@@ -14,7 +14,7 @@ const cases = [
 ]
 for (const [name, now, git] of cases) {
   const work = { startedAt: now - 133 * 60000, turns: 37, utcOffsetMin: 60 }
-  writeFileSync(`band-${name}.svg`, bandSvg({ meter, work, git, now }))
+  writeFileSync(`band-${name}.svg`, bandSvg({ meter, work, git, activity: null, isWorking: false, now }))
 }
 const failing = { branch: 'main', dirty: 0, ahead: 3, pr: 42, ci: 'fail' }
-writeFileSync('band-fail.svg', bandSvg({ meter, work: null, git: failing, now: cases[0][1] }))
+writeFileSync('band-fail.svg', bandSvg({ meter, work: null, git: failing, activity: null, isWorking: false, now: cases[0][1] }))
