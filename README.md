@@ -19,7 +19,7 @@ A [Claude Code](https://claude.com/claude-code) mod that turns the app into a ni
   - an animated critter that reacts to what Claude is doing.
 - **Korean lines** while Claude works, and `한 잔 할까?` ("one drink?") under the prompt.
 
-In the terminal the band is drawn as half-block pixel sprites with the animated critter from about 95 columns; a narrower terminal gets a single line of text. The CI status needs the GitHub CLI (`gh`) installed and logged in.
+In the terminal the band is three rows of half-block pixel sprites with the animated critter, from about 85 columns; a narrower terminal gets a single line of text. The CI status needs the GitHub CLI (`gh`) installed and logged in.
 
 | `cheonggye` | `alley` |
 |---|---|

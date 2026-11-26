@@ -10,7 +10,7 @@ import type { CiState } from './meter'
 import { SCENE as SCENE_ALLEY } from './scene'
 import { SCENE as SCENE_CHEONGGYE } from './scene-cheonggye'
 import { SCENE as SCENE_HAN } from './scene-han'
-import { CRITTER_COLUMNS, FRAME_MS, GAP, critterFrame, termBand, termBandColumns, toCells } from './term'
+import { FRAME_MS, GAP, critterFrame, termBand, termBandLayout, toCells } from './term'
 import type { CritterScene, Line } from './term'
 
 // A Korean city at night: indigo sky, neon pink and cyan, warm windows.
@@ -457,27 +457,36 @@ export const register: Register = on => {
     const { Box, Raster, Text } = $.ui.resolve(e)
 
     const band = termBand(figures, await read($, phase))
-    const need = termBandColumns(band)
-    const cols = e.props.bodyColumns
-    if (cols < need.compact) {
+    const layout = termBandLayout(band, e.props.bodyColumns)
+    if (!layout.pixels) {
       stage = null
       return <Text dimColor>{bandText(figures)}</Text>
     }
     const critter = toCells(critterFrame(band.critter.scene, frame))
     stage = { requestId: e.requestId, scene: band.critter.scene, cells: critter.cells }
-    const isFull = cols >= need.full
+    const isFull = layout.dayBeside
     const line = (l: Line, i: number) => (
       <Text key={String(i)} color={l.color} dimColor={l.dim} bold={l.bold} wrap="truncate">
         {l.text === '' ? ' ' : l.text}
       </Text>
     )
+    const pieces = (row: Line[], i: number) => (
+      <Box key={String(i)} flexDirection="row" columnGap={1}>
+        {row.filter(l => l.text !== '').map(line)}
+        {row.every(l => l.text === '') ? <Text> </Text> : null}
+      </Box>
+    )
     const meters = (
       <Box flexDirection="row" columnGap={GAP}>
-        <Box flexDirection="column" alignItems="center" width={CRITTER_COLUMNS}>
-          <Text color="#ff9ee0" wrap="truncate">
-            {band.critter.tag}
-          </Text>
+        <Box flexDirection="row" columnGap={1}>
           <Raster key="critter" {...critter} />
+          {layout.tag ? (
+            <Box flexDirection="column" width={band.critter.tagColumns}>
+              <Text color="#ff9ee0" wrap="truncate">
+                {band.critter.tag}
+              </Text>
+            </Box>
+          ) : null}
         </Box>
         {band.meters.map(m => (
           <Box key={m.key} flexDirection="row" columnGap={1}>
@@ -488,19 +497,17 @@ export const register: Register = on => {
           </Box>
         ))}
         {isFull ? (
-          <Box flexDirection="column" justifyContent="flex-end">
-            {band.day.map(line)}
-          </Box>
+          <Box flexDirection="column">{band.day.map(pieces)}</Box>
         ) : null}
       </Box>
     )
 
     return (
-      <Box flexDirection="column" alignSelf="flex-start" paddingX={1} borderStyle="round" borderColor="#3a2a5c">
+      <Box flexDirection="column" alignSelf="flex-start" paddingX={1}>
         {meters}
         {isFull ? null : (
           <Box flexDirection="row" columnGap={GAP}>
-            {band.day.filter(l => l.text !== '').map(line)}
+            {band.day.flat().filter(l => l.text !== '').map(line)}
           </Box>
         )}
       </Box>

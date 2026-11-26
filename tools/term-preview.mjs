@@ -15,9 +15,9 @@ const lines = px => {
   }
   return out
 }
-const sprites = [critterPixels('idle'), critterPixels('tipsy'), glassPixels(72), glassPixels(12), bottlePixels(45), skewerPixels(62)]
+const sprites = [critterPixels('idle'), critterPixels('tipsy'), critterPixels('sleep'), glassPixels(100), glassPixels(72), glassPixels(12), bottlePixels(100), bottlePixels(45), bottlePixels(10), ...[0, 20, 40, 60, 80, 100].map(skewerPixels)]
 const cols = sprites.map(lines)
-for (let r = 0; r < 6; r++) console.log(cols.map(c => c[r]).join('  '))
+for (let r = 0; r < 3; r++) console.log(cols.map(c => c[r]).join('  '))
 const now = Date.parse('2026-11-14T14:41:00Z')
 const band = termBand({ meter: { fiveHour: 28, fiveResetsAt: '2026-11-14T17:00:00Z', week: 55, weekResetsAt: '2026-11-17T15:00:00Z', context: 38 }, work: { startedAt: now - 7e6, turns: 12, utcOffsetMin: 60 }, git: { branch: 'main', dirty: 2, ahead: 1, pr: 4, ci: 'pass' }, activity: null, isWorking: false, now }, 0)
-console.log(band.critter.tag, band.meters.map(m => m.lines.map(l => l.text).join(' / ')), band.day.map(l => l.text))
+console.log(band.critter.tag, band.meters.map(m => m.lines.map(l => l.text).join(' / ')), band.day.map(r => r.map(l => l.text).join(" ")))

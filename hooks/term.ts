@@ -1,15 +1,15 @@
-// The band above the prompt for the terminal: the same somaek glass, soju bottle, fishcake
-// skewer and critter as the desktop's SVG, drawn as pixel art in half blocks (two pixels per
-// cell, one above the other), with the words beside them left to the terminal's own text.
+// The band above the prompt for the terminal: a small somaek glass, soju bottle, fishcake skewer
+// and critter, three rows high, drawn as pixel art in half blocks (two pixels per cell, one above
+// the other), with the words beside them left to the terminal's own text.
 // Pure: it takes the figures and returns cell grids and lines.
 
-import { CRITTER_INK, CRITTER_PALETTE, critterBody, critterState, critterTags } from './critter'
+import { CRITTER_INK, CRITTER_PALETTE, critterState, critterTags } from './critter'
 import type { CritterState } from './critter'
 import { ciLabel, clamp, hm, offHoursOf, untilReset, workday } from './meter'
 import type { BandFigures } from './meter'
 
-/** Pixel rows of every sprite: six terminal rows. */
-export const PIXEL_ROWS = 12
+/** Pixel rows of every sprite: three terminal rows. */
+export const PIXEL_ROWS = 6
 
 /** A sprite as colors, row-major; null is transparent. */
 type Pixels = (string | null)[][]
@@ -17,103 +17,85 @@ type Pixels = (string | null)[][]
 const paint = (rows: string[], palette: Record<string, string>): Pixels =>
   rows.map(row => [...row].map(c => palette[c] ?? null))
 
-// The somaek glass, 8 x 12: filled from the bottom with what is left of the 5-hour window.
+const RED = '#ff5468'
+
+// The somaek glass, 5 x 6: four rows inside, filled from the bottom with what is left of the
+// 5-hour window, foam on top; a stem and a foot below.
 export const glassPixels = (left: number | null): Pixels => {
-  const W = 8
-  const H = 12
-  const innerTop = 1
-  const innerBottom = H - 3
-  const innerH = innerBottom - innerTop + 1
-  const level = left === null ? 0 : Math.round((left / 100) * innerH)
-  const liquidTop = innerBottom - level + 1
+  const level = left === null ? 0 : Math.round((left / 100) * 4)
   const low = left !== null && left < 20
   const rows: string[] = []
-  for (let j = 0; j < H; j++) {
-    const inset = j > H / 2 ? 1 : 0
-    const l = inset
-    const r = W - 1 - inset
-    let row = ''
-    for (let i = 0; i < W; i++) {
-      if (i < l || i > r) row += '.'
-      else if (j >= H - 2) row += i === l || i === r ? 'g' : 'G'
-      else if (i === l || i === r) row += 'g'
-      else if (j < innerTop) row += '.'
-      else if (level > 0 && j >= liquidTop) {
-        const shot = j >= innerBottom - 2 && i >= 3 && i <= 4
-        if (j === liquidTop) row += 'f'
-        else if (shot) row += j === innerBottom - 2 ? 's' : 'S'
-        else row += i === r - 1 ? (low ? 'D' : 'd') : low ? 'L' : 'b'
-      } else row += i === l + 1 ? 'h' : 'e'
-    }
-    rows.push(row)
+  for (let j = 0; j < 4; j++) {
+    const fill = 4 - j
+    rows.push(fill > level ? 'gheeg' : fill === level ? 'gfffg' : 'gbbdg')
   }
+  rows.push(level > 0 ? '.gbg.' : '.geg.', '.GGG.')
   return paint(rows, {
     g: '#cfe6f5',
     G: '#a9c7dc',
-    h: '#3a3f5c',
     e: '#1d1d3b',
+    h: '#3a3f5c',
     f: '#fff8e7',
-    b: '#f2b630',
-    d: '#d9961c',
-    L: '#e8673a',
-    D: '#c24a24',
-    s: '#e8fff0',
-    S: '#f6d77a',
+    b: low ? '#e8673a' : '#f2b630',
+    d: low ? '#c24a24' : '#d9961c',
   })
 }
 
-// The soju bottle, 4 x 12: green glass, a white label, what is left of the week inside.
+// The soju bottle, 4 x 6: a cap, a neck, three rows inside holding what is left of the week, a base.
 export const bottlePixels = (left: number | null): Pixels => {
-  const shape = ['.cc.', '.nn.', '.nn.', 'nnnn', 'nnnn', 'nnnn', 'nnnn', 'nnnn', 'nnnn', 'nnnn', 'nnnn', '.nn.']
-  const body0 = 4
-  const bodyH = shape.length - body0 - 1
-  const level = left === null ? 0 : Math.round((left / 100) * bodyH)
-  const rows = shape.map((row, j) =>
-    [...row]
-      .map((c, i) => {
-        if (c !== 'n') return c
-        if (i === 0 || i === 3 || j < body0 || j === shape.length - 1) return 'n'
-        if (j === 6) return 'w'
-        if (j > shape.length - 2 - level) return i === 2 ? 'q' : 'l'
-        return i === 1 ? 'h' : 'k'
-      })
-      .join(''),
-  )
-  return paint(rows, { c: '#2e9e4f', n: '#2a8a4a', w: '#eef7f0', l: '#a9f0c2', q: '#7fd9a0', k: '#1f5a36', h: '#3fb86a' })
+  const level = left === null ? 0 : Math.round((left / 100) * 3)
+  const body = [0, 1, 2].map(j => (3 - j <= level ? 'nlqn' : 'nkkn'))
+  const liquid = left !== null && left < 20 ? RED : '#a9f0c2'
+  return paint(['.cc.', '.nn.', ...body, 'nnnn'], { c: '#2e9e4f', n: '#2a8a4a', l: liquid, q: '#7fd9a0', k: '#1f5a36' })
 }
 
-// The fishcake skewer, 5 x 12: one piece per fifth of the context window still free.
+// The fishcake skewer, 3 x 6: the stick's tip, then five pieces, one per fifth of the context
+// window still free, eaten from the top. The pieces take turns in two shades so they read apart.
 export const skewerPixels = (filled: number | null): Pixels => {
   const pieces = filled === null ? 5 : Math.max(0, Math.ceil((100 - clamp(filled)) / 20))
-  const rows = ['..s..']
-  for (let p = 0; p < 5; p++) {
-    const isLeft = p >= 5 - pieces
-    rows.push(isLeft ? 'OOOOO' : 'xxsxx', isLeft ? 'ooooo' : 'xxsxx')
-  }
-  rows.push('..s..')
-  return paint(rows, { s: '#c9a06a', O: '#f6c987', o: '#e0a35a', x: '#1d1d3b' })
+  const rows = ['.s.']
+  for (let p = 0; p < 5; p++) rows.push(p >= 5 - pieces ? (p % 2 === 0 ? 'OOO' : 'ooo') : '.s.')
+  return paint(rows, { s: '#c9a06a', O: '#f6c987', o: '#d98f46' })
 }
-
-// The critter's eyes, in its body's cells, as the SVG draws them.
-const EYES: Partial<Record<CritterState, [number, number][]>> = {
-  done: [[3, 4], [4, 3], [5, 4], [10, 4], [11, 3], [12, 4]],
-  'ci-pass': [[3, 4], [4, 3], [5, 4], [10, 4], [11, 3], [12, 4]],
-  sleep: [[3, 4], [4, 4], [5, 4], [10, 4], [11, 4], [12, 4]],
-  tipsy: [[4, 4], [5, 4], [10, 4], [11, 4]],
-  error: [[4, 3], [5, 3], [4, 4], [5, 4], [10, 3], [11, 3], [10, 4], [11, 4]],
-  'ci-fail': [[4, 3], [5, 3], [4, 4], [5, 4], [10, 3], [11, 3], [10, 4], [11, 4]],
-  long: [[4, 3], [5, 3], [4, 4], [5, 4], [10, 3], [11, 3], [10, 4], [11, 4]],
-}
-const OPEN_EYES: [number, number][] = [[4, 3], [4, 4], [11, 3], [11, 4]]
-const SHUT_EYES: [number, number][] = [[3, 4], [4, 4], [5, 4], [10, 4], [11, 4], [12, 4]]
 
 /** The critter's canvas: its body with a pixel to spare each side, and its props to the right. */
-export const CRITTER_W = 23
+export const CRITTER_W = 14
 /** How often the critter moves a frame. */
 export const FRAME_MS = 250
 
 /** What the critter acts out: its state, and the hour for its coffee. */
 export type CritterScene = { state: CritterState; offHours: 'overtime' | 'weekend' | null }
+
+// The body, 8 x 5, one row short of the canvas so it can bob; its eyes go at (1, 1) and (6, 1).
+const body = (state: CritterState): string[] => {
+  const cheek = state === 'tipsy' || state === 'ci-fail' ? 'R' : 'p'
+  return ['.oooooo.', 'oooooooo', `a${cheek}oooo${cheek}a`, '.oooooo.', '.l....l.']
+}
+const EYE_CELLS: [number, number][] = [[1, 1], [6, 1]]
+const LID = '#c96a4b'
+
+const eyeColor = (state: CritterState, t: number): string => {
+  switch (state) {
+    case 'sleep':
+      return LID
+    case 'done':
+    case 'ci-pass':
+      return '#ff5fa8'
+    case 'error':
+    case 'ci-fail':
+    case 'long':
+      return '#ffffff'
+    case 'read':
+      return '#c9e7ff'
+    case 'idle':
+    case 'coffee':
+    case 'thinking':
+      // a blink now and then
+      return t % 20 === 19 ? LID : CRITTER_INK
+    default:
+      return CRITTER_INK
+  }
+}
 
 const blank = (w: number, h: number): Pixels => Array.from({ length: h }, () => Array<string | null>(w).fill(null))
 
@@ -128,21 +110,6 @@ const stamp = (canvas: Pixels, rows: readonly string[], palette: Record<string, 
     })
   })
 }
-
-const at = (canvas: Pixels, cells: readonly (readonly [number, number])[], color: string, x: number, y: number) => {
-  for (const [i, j] of cells) {
-    const line = canvas[y + j]
-    if (line !== undefined && x + i >= 0 && x + i < line.length) line[x + i] = color
-  }
-}
-
-const HEART = ['.h.h.', 'hhhhh', '.hhh.', '..h..']
-const DRIP = ['.b.', 'bbb', '.b.']
-const GLASSES: [number, number][] = [
-  [3, 2], [4, 2], [5, 2], [3, 3], [5, 3], [3, 4], [5, 4], [3, 5], [4, 5], [5, 5],
-  [10, 2], [11, 2], [12, 2], [10, 3], [12, 3], [10, 4], [12, 4], [10, 5], [11, 5], [12, 5],
-  [6, 3], [7, 3], [8, 3], [9, 3],
-]
 
 // How the body moves at this frame: a step up (0 or 1) and a step aside (-1 to 1).
 const motion = (state: CritterState, t: number): { dy: number; dx: number } => {
@@ -175,56 +142,53 @@ const motion = (state: CritterState, t: number): { dy: number; dx: number } => {
   }
 }
 
-// What the critter holds or what floats beside it, at this frame.
-const props = (canvas: Pixels, scene: CritterScene, t: number, bx: number, by: number) => {
-  const P = 18 // the props' column
+const HEART = ['h.h', '.h.']
+const DRIP = { b: '#7fd8ff' }
+
+// What the critter holds or what floats beside it, at this frame: at most 3 x 6 pixels.
+const props = (canvas: Pixels, scene: CritterScene, t: number) => {
+  const P = 11 // the props' column
   switch (scene.state) {
     case 'thinking': {
       const dots = Math.floor(t / 2) % 4
-      for (let d = 0; d < dots; d++) at(canvas, [[0, 0]], '#c9a2ff', P + d * 2, 1)
+      stamp(canvas, ['ddd'.slice(0, dots)], { d: '#c9a2ff' }, P, 0)
       return
     }
     case 'bash':
-      stamp(canvas, ['kkkkk', t % 2 === 0 ? 'kKkKk' : 'KkKkK', 'kkkkk'], { k: '#2b2f45', K: '#5ff3ff' }, P, 8)
+      stamp(canvas, ['kkk', t % 2 === 0 ? 'kKk' : 'KkK'], { k: '#2b2f45', K: '#5ff3ff' }, P, 4)
       return
     case 'edit':
-      stamp(canvas, ['....Y', '...Y.', '..Y..', '.Y...', 'P....'], { Y: '#ffd23f', P: '#ff9ee0' }, P, 5)
-      if (Math.floor(t / 2) % 2 === 0) stamp(canvas, ['.w.', 'www', '.w.'], { w: '#ffffff' }, P + 2, 0)
-      return
-    case 'read':
-      at(canvas, GLASSES, '#c9e7ff', bx, by)
-      stamp(canvas, ['.mm.', 'm..m', 'm..m', '.mm.', '...h', '....'], { m: '#c9e7ff', h: '#c9a06a' }, P, 5)
+      stamp(canvas, ['..Y', '.Y.', 'P..'], { Y: '#ffd23f', P: '#ff9ee0' }, P, 3)
+      if (Math.floor(t / 2) % 2 === 0) stamp(canvas, ['..w'], { w: '#ffffff' }, P, 1)
       return
     case 'web': {
       const on = Math.floor(t / 2) % 2 === 0
-      stamp(canvas, ['ddd', on ? 'dSd' : 'dsd', on ? 'dsd' : 'dSd', on ? 'dSd' : 'dsd', 'ddd'], { d: '#2b2f45', S: '#5ff3ff', s: '#2a7f99' }, P + 1, 4)
+      stamp(canvas, ['ddd', on ? 'dSd' : 'dsd', 'ddd'], { d: '#2b2f45', S: '#5ff3ff', s: '#2a7f99' }, P, 3)
       return
     }
     case 'done':
-      stamp(canvas, HEART, { h: '#ff5fa8' }, P, 7 - (t % 8))
+      stamp(canvas, HEART, { h: '#ff5fa8' }, P, 4 - (t % 6))
       return
     case 'ci-pass':
-      stamp(canvas, HEART, { h: '#ff9ee0' }, P, 7 - (t % 8))
-      stamp(canvas, HEART, { h: '#ff5fa8' }, P, 7 - ((t + 4) % 8))
+      stamp(canvas, HEART, { h: t % 4 < 2 ? '#ff9ee0' : '#ff5fa8' }, P, 4 - (t % 6))
       return
     case 'error':
     case 'ci-fail':
-      stamp(canvas, DRIP, { b: '#7fd8ff' }, P, 1 + (t % 4) * 2)
+      stamp(canvas, ['b'], DRIP, P, t % 6)
       return
     case 'long':
-      stamp(canvas, DRIP, { b: '#7fd8ff' }, P, 1 + (t % 4) * 2)
-      stamp(canvas, DRIP, { b: '#7fd8ff' }, P + 2, 1 + ((t + 2) % 4) * 2)
+      stamp(canvas, ['b'], DRIP, P, t % 6)
+      stamp(canvas, ['b'], DRIP, P + 2, (t + 3) % 6)
       return
     case 'tipsy':
-      if (Math.floor(t / 4) % 3 === 0) stamp(canvas, ['.o.', 'o.o', '.o.'], { o: '#ff9ee0' }, P + 1, 1)
+      if (Math.floor(t / 4) % 3 === 0) stamp(canvas, ['.o.', 'o.o', '.o.'], { o: '#ff9ee0' }, P, 0)
       return
     case 'sleep':
-      stamp(canvas, ['ZZZ', '..Z', '.Z.', 'ZZZ'], { Z: '#c9a2ff' }, P + 1, 6 - (Math.floor(t / 2) % 4) * 2)
+      stamp(canvas, ['ZZZ', '.Z.', 'ZZZ'], { Z: '#c9a2ff' }, P, 2 - (Math.floor(t / 3) % 3))
       return
     case 'coffee': {
-      const steam = Math.floor(t / 4) % 2 === 0 ? ['.s..', '..s.'] : ['..s.', '.s..']
-      stamp(canvas, steam, { s: '#c6c0da' }, P, 5)
-      stamp(canvas, ['cccc', 'cccC', 'cccc'], { c: scene.offHours === 'weekend' ? '#ff9ee0' : '#f4efe0', C: '#c6c0da' }, P, 8)
+      stamp(canvas, ['s'], { s: '#c6c0da' }, P + (Math.floor(t / 4) % 2), 2)
+      stamp(canvas, ['cc.', 'ccC'], { c: scene.offHours === 'weekend' ? '#ff9ee0' : '#f4efe0', C: '#c6c0da' }, P, 4)
       return
     }
     default:
@@ -238,14 +202,14 @@ export const critterFrame = (scene: CritterScene, t: number): Pixels => {
   const canvas = blank(CRITTER_W, PIXEL_ROWS)
   const { dy, dx } = motion(state, t)
   const bx = 1 + dx
-  const by = PIXEL_ROWS - 11 - dy
-  stamp(canvas, critterBody(state), CRITTER_PALETTE, bx, by)
-  // a blink now and then, while nothing else holds its eyes
-  const isBlinking = (state === 'idle' || state === 'coffee' || state === 'thinking') && t % 20 === 19
-  at(canvas, EYES[state] ?? (isBlinking ? SHUT_EYES : OPEN_EYES), CRITTER_INK, bx, by)
-  // the bright spot in a wide-eyed look
-  if (state === 'error' || state === 'ci-fail' || state === 'long') at(canvas, [[4, 3], [10, 3]], '#ffffff', bx, by)
-  props(canvas, scene, t, bx, by)
+  const by = 1 - dy
+  stamp(canvas, body(state), CRITTER_PALETTE, bx, by)
+  const eye = eyeColor(state, t)
+  for (const [i, j] of EYE_CELLS) {
+    const line = canvas[by + j]
+    if (line !== undefined) line[bx + i] = eye
+  }
+  props(canvas, scene, t)
   return canvas
 }
 
@@ -300,9 +264,11 @@ export const toCells = (pixels: Pixels): { columns: number; rows: number; cells:
 export type Line = { text: string; color?: string; dim?: boolean; bold?: boolean }
 
 export type TermBand = {
-  critter: { scene: CritterScene; tag: string }
+  /** The critter, and its line beside it in a column as wide as the state's longer line. */
+  critter: { scene: CritterScene; tag: string; tagColumns: number }
   meters: { key: 'glass' | 'bottle' | 'skewer'; cells: ReturnType<typeof toCells>; textColumns: number; lines: Line[] }[]
-  day: Line[]
+  /** The workday's three lines, each in one or more pieces of its own color. */
+  day: Line[][]
 }
 
 /** How many terminal columns a text takes: Hangul and other wide letters take two. */
@@ -325,20 +291,34 @@ export const textWidth = (text: string): number => {
 
 const widest = (lines: readonly Line[]) => Math.max(0, ...lines.map(l => textWidth(l.text)))
 
-/** The critter's column: its body, and room for its longest line. */
-export const CRITTER_COLUMNS = CRITTER_W
-/** Between the band's columns, and the frame's border and padding on both sides. */
+/** How wide a line of pieces is, with a space between pieces. */
+export const piecesWidth = (pieces: readonly Line[]): number => {
+  const shown = pieces.filter(p => p.text !== '')
+  return shown.reduce((n, p) => n + textWidth(p.text), 0) + Math.max(0, shown.length - 1)
+}
+
+/** Between the band's columns, and the padding on both sides. */
 export const GAP = 2
-const FRAME = 4
+const FRAME = 2
+
+/** What the band shows in `columns`: the pixels or one line of text, the critter's line, the workday beside. */
+export type TermBandLayout = { pixels: boolean; tag: boolean; dayBeside: boolean }
 
 /**
- * The columns the band needs, by what it says now: from `full` the workday stands in a column
- * after the skewer; from `compact` it goes on a line under the pixels; below that, one line of text.
+ * What fits, by what the band says now. The pixels need only the critter and the three gauges, so
+ * they never give way to the critter's line, which changes with each state (a long idle line or
+ * 사랑해요 ♥ after a turn): the line shows when there is room for it. The workday stands in a
+ * column after the skewer when it fits, else on a line under the pixels. Below the pixels' width,
+ * one line of text.
  */
-export const termBandColumns = (band: TermBand): { full: number; compact: number } => {
-  const meters = band.meters.reduce((sum, m) => sum + m.cells.columns + 1 + m.textColumns + GAP, 0)
-  const compact = FRAME + CRITTER_COLUMNS + meters
-  return { compact, full: compact + GAP + widest(band.day) }
+export const termBandLayout = (band: TermBand, columns: number): TermBandLayout => {
+  const meters = band.meters.reduce((sum, m) => sum + GAP + m.cells.columns + 1 + m.textColumns, 0)
+  const base = FRAME + CRITTER_W + meters
+  if (columns < base) return { pixels: false, tag: false, dayBeside: false }
+  const withTag = base + 1 + band.critter.tagColumns
+  const tag = columns >= withTag
+  const day = GAP + Math.max(0, ...band.day.map(piecesWidth))
+  return { pixels: true, tag, dayBeside: columns >= (tag ? withTag : base) + day }
 }
 
 /** The band for the terminal; `phase` flips each few seconds (the tag's turn, a blink). */
@@ -374,7 +354,11 @@ export const termBand = ({ meter, work, git, activity, isWorking, now }: BandFig
   })
 
   return {
-    critter: { scene: { state, offHours: inputs.offHours }, tag: phase % 2 === 0 ? tagA : tagB },
+    critter: {
+      scene: { state, offHours: inputs.offHours },
+      tag: phase % 2 === 0 ? tagA : tagB,
+      tagColumns: Math.max(textWidth(tagA), textWidth(tagB)),
+    },
     meters: [
       gauge('glass', toCells(glassPixels(fiveLeft)), [
           { text: '소맥 · 5시간', dim: true },
@@ -392,10 +376,12 @@ export const termBand = ({ meter, work, git, activity, isWorking, now }: BandFig
       ]),
     ],
     day: [
-      { text: worked === null ? '' : `근무 ${hm(worked)} · 턴 ${work?.turns ?? 0}`, dim: true },
-      { text: day.label, bold: true, color: day.color },
-      { text: gitLine, color: '#c9a2ff' },
-      { text: ci.label, color: ci.color },
+      [{ text: day.label, bold: true, color: day.color }],
+      [{ text: worked === null ? '' : `근무 ${hm(worked)} · 턴 ${work?.turns ?? 0}`, dim: true }],
+      [
+        { text: gitLine, color: '#c9a2ff' },
+        { text: ci.label, color: ci.color },
+      ],
     ],
   }
 }
